@@ -1,0 +1,131 @@
+//THIS IS THE ONLY PUBLIC AUTO PALLET. THE STUN ZONE AUTO PALLET IS PRIVATE AND THE SOURCE CODE IS ONLY ACCESSIBLE TO TUAISBACK AND KYLAY
+if _G.autoPalletDropper then
+      _G.autoPalletDropper.running = false
+  end
+
+  local Players = game:GetService("Players")
+  local localPlayer = Players.LocalPlayer
+
+  local state = {
+      running = true,
+      pallets = {},
+      killerRoot = nil,
+      lastDrop = 0,
+  }
+  _G.autoPalletDropper = state
+
+  local DROP_KEY = 32 -- Space
+  local UPDATE_INTERVAL = 1 / 120
+  local INTERACTION_RADIUS = 9
+  local KILLER_HIT_RADIUS = 14
+  local KILLER_HEIGHT_TOLERANCE = 8
+  local COOLDOWN = 0.03
+  local KEY_HOLD_TIME = 0.01
+
+  local function rootOf(model)
+      return model and (
+          model:FindFirstChild("HumanoidRootPart")
+          or model:FindFirstChild("PrimaryPartPallet")
+          or model:FindFirstChild("HitBox")
+      )
+  end
+
+  local function refreshPallets()
+      local map = game.Workspace:FindFirstChild("Map")
+      local pallets = {}
+
+      if map then
+          for _, item in ipairs(map:GetDescendants()) do
+              if item.ClassName == "Model"
+                  and string.find(string.lower(item.Name), "pallet", 1, true) then
+
+                  local root = rootOf(item)
+                  local points = {}
+
+                  for _, child in ipairs(item:GetChildren()) do
+                      if string.find(string.lower(child.Name), "palletpoint", 1, true) then
+                          points[#points + 1] = child
+                      end
+                  end
+
+                  if root and #points > 0 then
+                      pallets[#pallets + 1] = {
+                          root = root,
+                          points = points,
+                      }
+                  end
+              end
+          end
+      end
+
+      state.pallets = pallets
+  end
+
+  task.spawn(function()
+      while state.running do
+          refreshPallets()
+          task.wait(0.5)
+      end
+  end)
+
+  task.spawn(function()
+      while state.running do
+          local killerRoot = nil
+
+          for _, player in ipairs(Players:GetPlayers()) do
+              if player ~= localPlayer
+                  and player.Team
+                  and player.Team.Name == "Killer" then
+                  killerRoot = rootOf(player.Character)
+                  break
+              end
+          end
+
+          state.killerRoot = killerRoot
+          task.wait(0.02)
+      end
+  end)
+
+  task.spawn(function()
+      while state.running do
+          local survivorRoot = rootOf(localPlayer.Character)
+          local killerRoot = state.killerRoot
+          local pallets = state.pallets
+
+          if survivorRoot and killerRoot
+              and #pallets > 0
+              and tick() - state.lastDrop >= COOLDOWN then
+
+              local nearestPointDistance = math.huge
+              local nearestPallet = nil
+
+              for _, pallet in ipairs(pallets) do
+                  for _, point in ipairs(pallet.points) do
+                      local distance = (survivorRoot.Position - point.Position).Magnitude
+                      if distance < nearestPointDistance then
+                          nearestPointDistance = distance
+                          nearestPallet = pallet
+                      end
+                  end
+              end
+
+              if nearestPallet and nearestPointDistance <= INTERACTION_RADIUS then
+                  local offset = killerRoot.Position - nearestPallet.root.Position
+                  local horizontalDistance = Vector3.new(offset.X, 0, offset.Z).Magnitude
+
+                  if horizontalDistance <= KILLER_HIT_RADIUS
+                      and math.abs(offset.Y) <= KILLER_HEIGHT_TOLERANCE then
+
+                      state.lastDrop = tick()
+                      keypress(DROP_KEY)
+                      task.wait(KEY_HOLD_TIME)
+                      keyrelease(DROP_KEY)
+                  end
+              end
+          end
+
+          task.wait(UPDATE_INTERVAL)
+      end
+  end)
+
+  print("[AutoPallet] 120 Hz mode armed")
