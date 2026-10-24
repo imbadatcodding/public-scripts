@@ -1,12 +1,2257 @@
---[[
- .____                  ________ ___.    _____                           __                
- |    |    __ _______   \_____  \\_ |___/ ____\_ __  ______ ____ _____ _/  |_  ___________ 
- |    |   |  |  \__  \   /   |   \| __ \   __\  |  \/  ___// ___\\__  \\   __\/  _ \_  __ \
- |    |___|  |  // __ \_/    |    \ \_\ \  | |  |  /\___ \\  \___ / __ \|  | (  <_> )  | \/
- |_______ \____/(____  /\_______  /___  /__| |____//____  >\___  >____  /__|  \____/|__|   
-         \/          \/         \/    \/                \/     \/     \/                   
-          \_Welcome to LuaObfuscator.com   (Alpha 0.10.9) ~  Much Love, Ferib 
+--======================================================================
+--  VIOLENCE DISTRICT HUB   (Matcha / Drawing UI)
+--  Tabs: Auto Pallet | Auto Skillcheck | Fast Vault | Veil Aim | Settings
+--  No calibration. Skillcheck rotation offset is derived from the
+--  AbsolutePosition binding at read time -- zero setup. The Veil aimbot
+--  measures the projectile's gravity multiplier off your own throws.
+--  Stop with:  _G.vdHub.stop()
+--======================================================================
+local previousHub = _G.vdHub
+local vaultCacheSeed = previousHub and previousHub._vaultCache
+if previousHub and previousHub.stop then
+    local ok, stopped = pcall(previousHub.stop)
+    if not ok or stopped == false then
+        warn("[vdHub] Enable Unsafe LuaU and stop the previous hub before reloading.")
+        return
+    end
+end
 
-]]--
+local Players     = game:GetService("Players")
+local RunService  = game:GetService("RunService")
+local Workspace   = game:GetService("Workspace")
+local lp          = Players.LocalPlayer
+local mouse       = lp:GetMouse()
 
-if (_G.vdHub and _G.vdHub.stop) then pcall(_G.vdHub.stop);end local v0=game:GetService("Players");local v1=game:GetService("RunService");local v2=game:GetService("Workspace");local v3=v0.LocalPlayer;local v4=v3:GetMouse();local v5={running=true,tab="pallet",cfg={p_enabled=false,interactionRadius=882 -(284 + 594) ,stunReach=11 -6 ,stunWidth=8 -5 ,stunHeight=170 -(122 + 44) ,cooldown=0.55 -0 ,hz=298 -208 ,p_dropKey=32,sc_enabled=false,sc_lead=2 + 0 ,sc_key=32,fv_enabled=false,fv_radius=1 + 5 ,fv_minSpeed=15.5,fv_deadband=76 -38 ,fv_target=36,fv_ignoreAxis=false,va_enabled=false,va_fov=120 -(30 + 35) ,va_range=260,va_smooth=1,va_sticky=true,va_gmult=0.5 + 0 ,va_autocal=true,va_los=true,va_lead=true,va_euler=true,va_holdOnly=true,va_aimHeight=1257 -(1043 + 214) ,va_originCam=false,theme=1,ui_opacity=3 -2 ,ui_round=6}};_G.vdHub=v5;local v6=((type(getbase)=="function") and select(1214 -(323 + 889) ,pcall(getbase))) or nil ;local v7,v8=false, -(2 -1);local function v9() local v137=580 -(361 + 219) ;local v138;while true do if (v137==0) then v138=tick();if ((v138-v8)>(321 -(53 + 267))) then local v759=0 + 0 ;while true do if (v759==(413 -(15 + 398))) then v8=v138;if v6 then local v955,v956=pcall(memory_read,"byte",v6);v7=v955 and (v956==77) ;else v7=false;end break;end end end v137=983 -(18 + 964) ;end if (v137==(3 -2)) then return v7;end end end local function v10(v139) local v140=0 + 0 ;local v141;local v142;while true do if (0==v140) then v141,v142=pcall(memory_read,"float",v139);if (v141 and (type(v142)=="number") and (v142==v142) and (v142~=math.huge) and (v142~= -math.huge)) then return v142;end break;end end end local function v11(v143) local v144=v143.AbsolutePosition;local v145=v143.AbsoluteSize;if ( not v144 or  not v145) then return nil;end local v146=v143.Address;local function v147(v533,v534) return v533 and v534 and (math.abs(v533-v534 )<(0.25 + 0)) ;end for v535=1090 -(20 + 830) ,384,4 do if (v147(v10(v146 + v535 ),v144.X) and v147(v10(v146 + v535 + 4 + 0 ),v144.Y) and v147(v10(v146 + v535 + (134 -(116 + 10)) ),v145.X) and v147(v10(v146 + v535 + 12 ),v145.Y)) then return v535;end end end local v12=232;local function v13(v148,v149) local v150=v10(v148.Address + v12 );local v151=v10(v149.Address + v12 );if ( not v150 or  not v151) then return nil;end if ((v150~=v150) or (v151~=v151)) then return nil;end if ((v150< -3600) or (v150>(2660 + 33340)) or (v151< -3600) or (v151>(36738 -(542 + 196)))) then return nil;end return v150,v151;end local v14={};local v15={};local v16={};local v17={};local v18={};local v19={elig=false,inZone=false,hp=true,nearD=nil,killD=nil};local function v20() local v152=0 -0 ;local v153;while true do if (v152==0) then v153=v3.Character;return v153 and v153:FindFirstChild("HumanoidRootPart") ;end end end local function v21() local v154=v3.Character;local v155=v154 and v154:FindFirstChild("Humanoid") ;if  not v155 then return true;end local v156=v155.Health;return (type(v156)~="number") or (v156>(15 + 35)) ;end local function v22() local v157=0 + 0 ;local v158;local v159;local v160;local v161;while true do if ((0 + 0)==v157) then v158=v3.Character;v159=v158 and v158:FindFirstChild("CheckInterractable") ;v157=2 -1 ;end if (v157==(2 -1)) then if  not v159 then return false;end v160,v161=pcall(function() return v159:GetAttribute("isDroppingPallet");end);v157=2;end if ((1553 -(1126 + 425))==v157) then return v160 and (v161==true) ;end end end local function v23(v162,v163,v164,v165) local v166=405 -(118 + 287) ;local v167;while true do if (1==v166) then return false;end if (v166==(0 -0)) then v167=v165 * v165 ;for v712,v713 in ipairs(v15) do local v714=1121 -(118 + 1003) ;local v715;local v716;local v717;while true do if (v714==(0 -0)) then v715,v716,v717=v162-v713[378 -(142 + 235) ] ,v163-v713[2] ,v164-v713[13 -10 ] ;if (((v715 * v715) + (v716 * v716) + (v717 * v717))<=v167) then return true;end break;end end end v166=1 + 0 ;end end end local function v24() local v168,v169,v170,v171={},{},{},{};local v172=v2:FindFirstChild("Map");if  not v172 then v14={};v15={};v16={};return;end for v536,v537 in ipairs(v172:GetDescendants()) do local v538=v537.Name;if ((v538=="PalletPoint") and (v537.ClassName=="Part")) then local v624=977 -(553 + 424) ;local v625;while true do if (0==v624) then v625=v537.Parent;if v625 then local v881=0 -0 ;local v882;local v883;local v884;while true do if ((0 + 0)==v881) then v882=v625.Address;v883=v169[v882];v881=1 + 0 ;end if (v881==(1 + 0)) then if  not v883 then local v1026=v625:FindFirstChild("PrimaryPartPallet");if ( not v1026 or  not v1026.Size) then v1026=v537;end v883={board=v1026,pts={},id=v1026.Address};v169[v882]=v883;v168[ #v168 + 1 ]=v883;end v884=v537.Position;v881=1 + 1 ;end if (v881==(2 + 0)) then if v884 then v883.pts[ #v883.pts + (2 -1) ]={v884.X,v884.Y,v884.Z};end break;end end end break;end end elseif ((v538=="VaultPoint") or (v538=="PalletPointSlide")) then local v760=0;local v761;while true do if (v760==(4 -3)) then if v761 then v170[ #v170 + (754 -(239 + 514)) ]={v761.X,v761.Y,v761.Z};end break;end if (v760==0) then v761=v537.Position;if  not v761 then local v958=v537.Parent;v761=(v958 and v958.Position) or nil ;end v760=1 + 0 ;end end end if ((v538=="VaultTrigger") and (v537.ClassName=="Part")) then local v626=v537.CFrame;if v626 then local v762=0 -0 ;local v763;local v764;local v765;local v766;while true do if (v762==(1203 -(373 + 829))) then v766=math.sqrt((v764 * v764) + (v765 * v765) );if (v766>(731.0000999999975 -(476 + 255))) then local v959=v626.Position;v171[ #v171 + (1131 -(369 + 761)) ]={v959.X,v959.Y,v959.Z,v764/v766 ,v765/v766 };end break;end if (v762==(0 + 0)) then v763=v626.LookVector;v764,v765=v763.X,v763.Z;v762=1 -0 ;end end end end end v14=v168;v15=v170;v16=v171;for v539,v540 in ipairs(v168) do local v541,v542=pcall(function() return v540.board.Size;end);if (v541 and v542) then local v627={v542.X,v542.Y,v542.Z};local v628={1 + 0 ,1 + 1 ,3};table.sort(v628,function(v718,v719) return v627[v718]<v627[v719] ;end);local v629={};v629[v628[1581 -(1183 + 397) ]],v629[v628[5 -3 ]],v629[v628[3 + 0 ]]=1,2,3 + 0 ;v540.ax={v627[1] * 0.5 ,v627[2] * 0.5 ,v627[3] * (0.5 + 0) ,v629[2 -1 ],v629[7 -5 ],v629[3 -0 ]};end end end local function v25() local v173=0 + 0 ;local v174;local v175;local v176;local v177;local v178;local v179;local v180;local v181;while true do if (v173==(856 -(564 + 292))) then v174=v0;v175,v176=pcall(game.GetService,game,"Players");if (v175 and v176) then v174=v176;end v173=1;end if (v173==2) then v179,v180=pcall(function() return v174:GetChildren();end);if ( not v179 or (type(v180)~="table")) then return {};end v181={};v173=4 -1 ;end if (v173==1) then if  not v174 then return {};end v177,v178=pcall(function() return v174:GetPlayers();end);if (v177 and (type(v178)=="table") and ( #v178>(0 -0))) then return v178;end v173=306 -(244 + 60) ;end if (v173==(3 + 0)) then for v720,v721 in ipairs(v180) do if (v721.ClassName=="Player") then v181[ #v181 + 1 ]=v721;end end return v181;end end end local function v26() local v182,v183=pcall(function() return v3.Team;end);if ( not v182 or  not v183) then return false;end local v184=string.lower(tostring(v183.Name or "" ));if (v184:find("spectator") or v184:find("lobby")) then return false;end return true;end local function v27() local v185=476 -(41 + 435) ;local v186;local v187;local v188;local v189;local v190;local v191;local v192;while true do if (v185==(1001 -(938 + 63))) then v186,v187={},{};v188,v189=nil,nil;pcall(function() v188=v3.UserId;end);v185=1 + 0 ;end if (v185==2) then v190=v20();v191=v190 and v190.Position ;if  not v191 then local v767=1125 -(936 + 189) ;while true do if (v767==0) then v19.killD=nil;return;end end end v185=1 + 2 ;end if (v185==(1616 -(1565 + 48))) then v192=nil;for v723=1 + 0 , #v17 do local v724=1138 -(782 + 356) ;local v725;while true do if (v724==(267 -(176 + 91))) then v725=v17[v723].Position;if v725 then local v911=0 -0 ;local v912;local v913;local v914;local v915;while true do if (1==v911) then if ( not v192 or (v915<v192)) then v192=v915;end break;end if (v911==(0 -0)) then v912,v913,v914=v191.X-v725.X ,v191.Y-v725.Y ,v191.Z-v725.Z ;v915=(v912 * v912) + (v913 * v913) + (v914 * v914) ;v911=1093 -(975 + 117) ;end end end break;end end end v19.killD=(v192 and math.sqrt(v192)) or nil ;v185=4;end if (v185==4) then if (v19.killD and (v19.killD>(2075 -(157 + 1718)))) then v19.killD=nil;end break;end if (v185==(1 + 0)) then pcall(function() v189=v3.Name;end);for v727,v728 in ipairs(v25()) do local v729=0 -0 ;local v730;while true do if (0==v729) then v730=(v188 and (v728.UserId==v188)) or (v189 and (v728.Name==v189)) ;if  not v730 then local v916=0 -0 ;local v917;local v918;while true do if (1==v916) then if v918 then local v1034=1018 -(697 + 321) ;local v1035;while true do if ((0 -0)==v1034) then v1035=(v728.Team and string.lower(tostring(v728.Team.Name or "" ))) or "" ;if (v1035:find("killer") or v1035:find("jason") or v1035:find("hunter")) then v186[ #v186 + (1 -0) ]=v918;else v187[ #v187 + (2 -1) ]=v918;end break;end end end break;end if (v916==(0 + 0)) then v917=v728.Character;v918=v917 and v917:FindFirstChild("HumanoidRootPart") ;v916=1;end end end break;end end end if ( #v186>(0 -0)) then v17=v186;elseif v26() then v17=v187;else v17={};end v185=2;end end end task.spawn(function() local v193,v194=nil, -(2 -1);local v195=false;while v5.running do local v543=1227 -(322 + 905) ;local v544;local v545;local v546;while true do if (v543==(611 -(602 + 9))) then v544=v2:FindFirstChild("Map");v545=(v544 and v544.Address) or nil ;v543=1190 -(449 + 740) ;end if (2==v543) then v193,v194=v545,v546;task.wait(873 -(826 + 46) );break;end if (v543==(948 -(245 + 702))) then v546=(v544 and  #v544:GetChildren()) or 0 ;if (v546==(0 -0)) then if (( #v14>(0 + 0)) or ( #v15>0)) then v14,v15,v16,v18={},{},{},{};end v195=true;elseif ((v545~=v193) or (v194<=(1898 -(260 + 1638))) or v195) then v14,v15,v16,v18={},{},{},{};task.wait(441 -(382 + 58) );pcall(v24);v195=false;end v543=6 -4 ;end end end end);task.spawn(function() while v5.running do local v547=0;while true do if (v547==(0 + 0)) then pcall(v27);task.wait(0.5 -0 );break;end end end end);local function v28(v196,v197,v198) local v199=v196.ax;if  not v199 then return false;end local v200,v201=pcall(function() return v196.board.CFrame:PointToObjectSpace(v197);end);if ( not v200 or  not v201) then return false;end if (math.abs(v201.X)>(v199[2 -1 ] + v198[v199[4]])) then return false;end if (math.abs(v201.Y)>(v199[1207 -(902 + 303) ] + v198[v199[10 -5 ]])) then return false;end if (math.abs(v201.Z)>(v199[3] + v198[v199[6]])) then return false;end return true;end local v29={0 + 0 ,214 -(22 + 192) ,1463 -(1404 + 59) };local v30={};local v31={};task.spawn(function() while v5.running do local v548=v5.cfg;local v549,v550=false,false;local v551=nil;if v548.p_enabled then local v635=v20();local v636=v21();if (v635 and v636) then local v769=v635.Position;local v770,v771,v772=v769.X,v769.Y,v769.Z;local v773=tick();local v774=v548.interactionRadius * v548.interactionRadius ;v29[1]=v548.stunReach;v29[2]=v548.stunWidth;v29[3]=v548.stunHeight;local v781=0;for v823=1, #v14 do local v824=v14[v823];local v825=v824.pts;local v826=false;for v855=2 -1 , #v825 do local v856=v825[v855];local v857,v858,v859=v770-v856[1 -0 ] ,v771-v856[767 -(468 + 297) ] ,v772-v856[3] ;local v860=(v857 * v857) + (v858 * v858) + (v859 * v859) ;if ( not v551 or (v860<v551)) then v551=v860;end if (v860<=v774) then v826=true;end end if v826 then local v890=562 -(334 + 228) ;while true do if (v890==(0 -0)) then v781=v781 + 1 ;v30[v781]=v824;break;end end end end if (v781>0) then local v861=0 -0 ;local v862;while true do if (v861==(1 -0)) then for v983=1 + 0 , #v17 do local v984=0;local v985;while true do if (v984==0) then v985=v17[v983].Position;if v985 then local v1058=236 -(141 + 95) ;while true do if (v1058==(0 + 0)) then v862=v862 + 1 ;v31[v862]=v985;break;end end end break;end end end for v986=1,v781 do local v987=v30[v986];for v993=2 -1 ,v862 do if v28(v987,v31[v993],v29) then v550=true;if (((v773-(v18[v987.id] or (0 -0)))>=v548.cooldown) and  not v22() and  not v23(v770,v771,v772,v548.interactionRadius)) then keypress(v548.p_dropKey);task.wait(0.02 + 0 );keyrelease(v548.p_dropKey);v18[v987.id]=tick();end break;end end end break;end if (v861==(0 -0)) then v549=true;v862=0 + 0 ;v861=1 + 0 ;end end end end v19.hp=v636;end v19.elig,v19.inZone=v549,v550;local v554=(v551 and math.sqrt(v551)) or nil ;v19.nearD=(v554 and (v554<=(281 -81)) and v554) or nil ;task.wait((1 + 0)/v5.cfg.hz );end end);local v32=false;local v33=163 -(92 + 71) ;local v34={l=nil,g=nil,win=nil};local v35=nil;local v36=0 + 0 ;task.spawn(function() while v5.running do local v556=v5.cfg;if (v556.sc_enabled and v9()) then local v638=v3.PlayerGui:FindFirstChild("SkillCheckPromptGui");local v639=v638 and v638:FindFirstChild("Check") ;local v640=v639 and v639:FindFirstChild("Line") ;local v641=v639 and v639:FindFirstChild("Goal") ;if (v640 and v641) then local v782,v783=v13(v640,v641);if (v782 and v783) then local v863=v783 + (170 -68) + v556.sc_lead ;local v864=v783 + (881 -(574 + 191)) ;v34.l,v34.g,v34.win=v782,v783,string.format("%.0f..%.0f",v863,v864);if ((v35==nil) or (math.abs(v783-v35 )>0.5)) then local v919=0 + 0 ;while true do if (v919==(0 -0)) then v35=v783;v32=false;v919=1 + 0 ;end if (v919==1) then if (v783>(849.5 -(254 + 595))) then v36=v36 + (127 -(55 + 71)) ;end break;end end end if (v782<v863) then v32=false;elseif ((v782<=v864) and (v782>0.5) and  not v32) then keypress(v556.sc_key);task.wait(0.015 -0 );keyrelease(v556.sc_key);v32=true;v33=v33 + (1791 -(573 + 1217)) ;end else local v868=0 -0 ;while true do if (v868==0) then v34.l,v34.g,v34.win=nil,nil,nil;v32=false;break;end end end else v32=false;end end task.wait((1 + 0)/(386 -146) );end end);local v37={near=false,holding=false,nearD=nil,vaults=939 -(714 + 225) ,ang=nil};local v38=false;local v39=nil;local v40=nil;local v41=nil;local v42=nil;local v43=nil;local v44=nil;local v45=0 -0 ;local function v46(v202,v203,v204,v205) local v206=math.clamp((v202 * v204) + (v203 * v205) , -(1 -0),1 + 0 );local v207=math.deg(math.acos(v206));if (v207>(130 -40)) then v207=(986 -(118 + 688)) -v207 ;end return v207;end local function v47(v208,v209,v210,v211,v212,v213) local v214,v215;for v557=1, #v16 do local v558=v16[v557];local v559,v560,v561=v208-v558[49 -(25 + 23) ] ,v209-v558[1 + 1 ] ,v210-v558[1889 -(927 + 959) ] ;local v562=(v559 * v559) + (v560 * v560) + (v561 * v561) ;if (( not v215 or (v562<v215)) and (v562<=v213)) then v215,v214=v562,v558;end end if  not v214 then return nil;end return v214,math.sqrt(v215),v46(v214[13 -9 ],v214[5],v211,v212);end local function v48(v216) local v217=732 -(16 + 716) ;local v218;local v219;while true do if (v217==0) then v218,v219=pcall(memory_read,"float",v216);return v218 and (type(v219)=="number") and (v219==v219) and v219 ;end end end local function v49(v220) local v221,v222=pcall(memory_read,"uintptr",v220);return v221 and (type(v222)=="number") and v222 ;end local function v50(v223) local v224=0 -0 ;local v225;while true do if (v224==(97 -(11 + 86))) then v225={};for v731=0 -0 ,293 -(175 + 110)  do local v732=v48(v223 + (v731 * (9 -5)) );if ( not v732 or (v732< -1.001) or (v732>(4.0009999999999994 -3))) then return false;end v225[v731 + (1797 -(503 + 1293)) ]=v732;end v224=1;end if (v224==(2 -1)) then for v734=0 + 0 ,1063 -(810 + 251)  do local v735,v736,v737=v225[(v734 * (3 + 0)) + 1 + 0 ],v225[(v734 * (3 + 0)) + 2 ],v225[(v734 * 3) + (536 -(43 + 490)) ];local v738=(v735 * v735) + (v736 * v736) + (v737 * v737) ;if ((v738<(733.98 -(711 + 22))) or (v738>(3.02 -2))) then return false;end end return true;end end end local function v51(v226) local v227=v226 and v226.Address ;if  not v227 then return nil;end if ((v41==v227) and v42 and v43) then local v603=0;local v604;while true do if (v603==(860 -(240 + 619))) then v40,v41,v44=nil,nil,nil;break;end if ((0 + 0)==v603) then v604=v49(v227 + v42 );if (v604 and (v604>1048576)) then local v869=0 -0 ;while true do if (v869==(0 + 0)) then if (v604~=v44) then v44,v40=v604,v604 + v43 ;end return v40;end end end v603=1745 -(1344 + 400) ;end end end local v228=os.clock();if (v228<v45) then return nil;end v45=v228 + 0.1 ;local v229,v230,v231,v232=pcall(function() local v563=0;local v564;local v565;while true do if (v563==0) then v564,v565={},{};if v42 then v564[ #v564 + (406 -(255 + 150)) ]=v42;end v563=1;end if (v563==1) then v564[ #v564 + 1 ]=309 + 83 ;v564[ #v564 + 1 ]=159 + 137 ;v563=2;end if ((8 -6)==v563) then for v784=413 -285 ,2315 -(404 + 1335) ,414 -(183 + 223)  do v564[ #v564 + (1 -0) ]=v784;end for v786,v787 in ipairs(v564) do if  not v565[v787] then v565[v787]=true;local v871=v49(v227 + v787 );if (v871 and (v871>(694773 + 353803))) then local v920=0;local v921;while true do if (v920==1) then if v921 then local v1037,v1038={236},{};for v1047=465 -(10 + 327) ,268 + 116 ,342 -(118 + 220)  do v1037[ #v1037 + 1 ]=v1047;end for v1049,v1050 in ipairs(v1037) do if  not v1038[v1050] then local v1060=0 + 0 ;local v1061;local v1062;local v1063;while true do if (v1060==(450 -(108 + 341))) then if (v1061 and v1062 and v1063 and (math.abs(v1061-v921.X )<1.5) and (math.abs(v1062-v921.Y )<(1.5 + 0)) and (math.abs(v1063-v921.Z )<(4.5 -3)) and v50((v871 + v1050) -(1529 -(711 + 782)) )) then return (v871 + v1050) -(68 -32) ,v787,v871;end break;end if (v1060==(469 -(270 + 199))) then v1038[v1050]=true;v1061,v1062,v1063=v48(v871 + v1050 ),v48(v871 + v1050 + 4 ),v48(v871 + v1050 + 3 + 5 );v1060=1820 -(580 + 1239) ;end end end end end break;end if (v920==0) then v921=nil;pcall(function() v921=v226.CFrame.Position;end);v920=1;end end end end end break;end end end);if ( not v229 or  not v230) then return nil;end v40,v41,v42,v44=v230,v227,v231,v232;v43=v230-v232 ;v37.ptr=v231;return v230;end local function v52(v234,v235,v236,v237) local v238=0;while true do if (v238==0) then if  not v235 then return false;end return pcall(function() memory_write("float",v235 + (0 -0) , -v237);memory_write("float",v235 + 4 + 0 ,0 + 0 );memory_write("float",v235 + 8 , -v236);memory_write("float",v235 + 6 + 6 ,0);memory_write("float",v235 + (41 -25) ,1);memory_write("float",v235 + 13 + 7 ,0);memory_write("float",v235 + (1191 -(645 + 522)) ,v236);memory_write("float",v235 + (1818 -(1010 + 780)) ,0);memory_write("float",v235 + 32 , -v237);end);end end end local function v53(v239,v240,v241,v242,v243,v244) local v245=0;local v246;local v247;local v248;while true do if ((1 + 0)==v245) then v247=math.rad(v243);if (math.abs(v246)<=v247) then local v788=0 -0 ;while true do if ((0 -0)==v788) then if v244 then return v241,v242;end return nil;end end end v245=1838 -(1045 + 791) ;end if (v245==(0 -0)) then if (((v239 * v241) + (v240 * v242))<0) then v239,v240= -v239, -v240;end v246=math.atan2((v239 * v242) -(v240 * v241) ,(v239 * v241) + (v240 * v242) );v245=1 -0 ;end if (v245==(507 -(351 + 154))) then v248=((v246>(1574 -(1281 + 293))) and v247) or  -v247 ;return (v239 * math.cos(v248)) -(v240 * math.sin(v248)) ,(v239 * math.sin(v248)) + (v240 * math.cos(v248)) ;end end end task.spawn(function() while v5.running do local v566=v5.cfg;if v566.fv_enabled then local v642=v20();if (v642 and ( #v16>(266 -(28 + 238)))) then local v789=0 -0 ;local v790;local v791;while true do if ((1559 -(1381 + 178))==v789) then v790=v642.CFrame;v791=v790 and v790.Position ;v789=1;end if (v789==(1 + 0)) then if v791 then local v964,v965;pcall(function() local v988=0 + 0 ;local v989;while true do if (v988==(0 + 0)) then v989=workspace.CurrentCamera.CFrame.LookVector;v964,v965=v989.X,v989.Z;break;end end end);if  not v964 then local v994=0 -0 ;local v995;while true do if (v994==(0 + 0)) then v995=v790.LookVector;v964,v965=v995.X,v995.Z;break;end end end local v966=math.sqrt((v964 * v964) + (v965 * v965) );if (v966>(470.0000999999975 -(381 + 89))) then v964,v965=v964/v966 ,v965/v966 ;end local v967,v968,v969=v47(v791.X,v791.Y,v791.Z,v964,v965,v566.fv_radius * v566.fv_radius );v37.near=v967~=nil ;v37.nearD=v968;v37.ang=v969;if  not v40 then v51(v642);end local v973=0;pcall(function() local v990=0 + 0 ;local v991;while true do if ((0 + 0)==v990) then v991=v642.Velocity;v973=math.sqrt((v991.X * v991.X) + (v991.Z * v991.Z) );break;end end end);v37.spd=v973;local v975=(v967~=nil) and (v973>v566.fv_minSpeed) ;local v976=v566.fv_ignoreAxis or (v969 and (v969>v566.fv_deadband)) ;if (v975 and  not v38 and v976) then v38=true;v39=nil;v37.vaults=v37.vaults + (1 -0) ;elseif  not v975 then v38,v39=false,nil;end if (v38 and v967) then local v997=1156 -(1074 + 82) ;local v998;local v999;while true do if (v997==(0 -0)) then v998,v999=v53(v967[1788 -(214 + 1570) ],v967[1460 -(990 + 465) ],v964,v965,v566.fv_target,v566.fv_ignoreAxis);if v998 then v39={v998,v999};end v997=1;end if (v997==(1 + 0)) then if v39 then local v1064=v51(v642);v37.holding=v52(v642,v1064,v39[1 + 0 ],v39[7 -5 ]);v37.held=(v37.held or 0) + (1727 -(1668 + 58)) ;if  not v37.holding then v37.miss=(v37.miss or 0) + 1 ;end else v37.holding=false;v37.bow=(v37.bow or 0) + (627 -(512 + 114)) ;end break;end end else v37.holding=false;end end break;end end else v37.near,v37.holding,v37.nearD,v37.ang=false,false,nil,nil;v38,v39=false,nil;end else local v643=0 -0 ;while true do if (v643==(0 -0)) then v37.near,v37.holding=false,false;v38,v39=false,nil;break;end end end task.wait((3 -2)/240 );end end);local v54,v55,v56=nil,nil,0 + 0 ;local function v57() local v249=v2.CurrentCamera;if  not v249 then return nil;end local v250=v249.Address;if  not v250 then return nil;end if ((v55==v250) and v54) then return v54;end local v251=os.clock();if (v251<v56) then return nil;end v56=v251 + 0.1 ;local v252,v253=pcall(function() local v567=0;local v568;local v569;local v570;local v571;local v572;while true do if (v567==(1 + 1)) then function v571(v796,v797,v798) return v796 and (math.abs(v796-v797 )<=v798) ;end v572={188 + 28 };v567=3;end if (v567==(10 -7)) then for v799=64,3018 -(109 + 1885) ,1473 -(1269 + 200)  do v572[ #v572 + (1 -0) ]=v799;end for v801,v802 in ipairs(v572) do if (v571(v10(v250 + v802 + (823 -(98 + 717)) ), -v569.X,826.01 -(802 + 24) ) and v571(v10(v250 + v802 + 20 ), -v569.Y,0.01) and v571(v10(v250 + v802 + (54 -22) ), -v569.Z,0.01 -0 ) and v571(v10(v250 + v802 + 36 ),v570.X,0.05 + 0 ) and v571(v10(v250 + v802 + 31 + 9 ),v570.Y,0.05 + 0 ) and v571(v10(v250 + v802 + 10 + 34 ),v570.Z,0.05 -0 )) then return v802;end end v567=13 -9 ;end if (v567==(2 + 2)) then return nil;end if ((0 + 0)==v567) then v568=v249.CFrame;if  not v568 then return nil;end v567=1 + 0 ;end if (v567==1) then v569,v570=v568.LookVector,v568.Position;v571=nil;v567=2;end end end);if (v252 and v253) then v54,v55=v250 + v253 ,v250;return v54;end end local v58=Vector3.new(0,1 + 0 ,0);local function v59(v254,v255) if ( not v254 or  not v255) then return false;end local v256= -v255;local v257=v58:Cross(v256);if (v257.Magnitude<0.0001) then return false;end v257=v257.Unit;local v259=v256:Cross(v257);local v260=pcall(function() local v573=0 + 0 ;while true do if (v573==3) then memory_write("float",v254 + (1457 -(797 + 636)) ,v257.Z);memory_write("float",v254 + 28 ,v259.Z);v573=19 -15 ;end if (v573==(1620 -(1427 + 192))) then memory_write("float",v254 + 3 + 5 ,v256.X);memory_write("float",v254 + (27 -15) ,v257.Y);v573=2;end if (v573==4) then memory_write("float",v254 + 29 + 3 ,v256.Z);break;end if (v573==(1 + 1)) then memory_write("float",v254 + (342 -(192 + 134)) ,v259.Y);memory_write("float",v254 + (1296 -(316 + 960)) ,v256.Y);v573=2 + 1 ;end if (v573==0) then memory_write("float",v254 + 0 ,v257.X);memory_write("float",v254 + 4 ,v259.X);v573=1 + 0 ;end end end);return v260;end local v60=182.2 + 14 ;local function v61() local v261=0 -0 ;local v262;while true do if (v261==(551 -(83 + 468))) then v262=v2.Address;if v262 then local v803=1806 -(1202 + 604) ;local v804;while true do if ((0 -0)==v803) then v804=v10(v262 + 2504 );if (v804 and (v804>(33 -13)) and (v804<2000)) then return v804;end break;end end end v261=2 -1 ;end if (v261==1) then return v60;end end end local v62=(326 -(45 + 280))/(58 + 2) ;local v63={target=nil,dist=nil,speed=nil,flight=nil,hold=0 + 0 ,solved=false,tier=nil,cd=0 + 0 ,drop=nil,measG=nil,measN=0,gmult=nil,charging=false,addr=false};local v64=0;local function v65(v263,v264,v265,v266,v267,v268,v269,v270) local v271,v272,v273=v266-v263 ,v267-v264 ,v268-v265 ;local v274=math.sqrt((v271 * v271) + (v273 * v273) );if (v274<(0.0010000000474974513 + 0)) then return nil;end local v275=v269 * v269 ;local v276=(v275 * v275) -(v270 * ((v270 * v274 * v274) + ((1 + 1) * v272 * v275))) ;if (v276<(0 -0)) then return nil;end local v277=(v275-math.sqrt(v276))/(v270 * v274) ;local v278=math.atan(v277);local v279,v280=math.cos(v278),math.sin(v278);if (v279<0.0001) then return nil;end return Vector3.new((v271/v274) * v279 ,v280,(v273/v274) * v279 ),v274/(v269 * v279) ;end local function v66(v281,v282,v283,v284,v285,v286,v287,v288,v289) local v290,v291=v65(v281,v282,v283,v284,v285,v286,v287,v288);if  not v290 then return nil;end if v289 then for v645=1912 -(340 + 1571) ,4 do local v646=v288 * (1 + 0 + (v62/math.max(v291,1772.0010000000475 -(1733 + 39) ))) ;local v647,v648=v65(v281,v282,v283,v284,v285,v286,v287,v646);if  not v647 then break;end local v649=math.abs(v648-v291 )<(0.0001 -0) ;v290,v291=v647,v648;if v649 then break;end end end return v290,v291;end local function v67(v292,v293,v294,v295,v296,v297) local v298=0;local v299;local v300;while true do if (v298==(1034 -(125 + 909))) then v299,v300=v66(v292.X,v292.Y,v292.Z,v293.X,v293.Y,v293.Z,v295,v296,v297);if  not v299 then return nil;end v298=1949 -(1096 + 852) ;end if (1==v298) then if v294 then for v830=1 + 0 ,7 -1  do local v831,v832=v66(v292.X,v292.Y,v292.Z,v293.X + (v294.X * v300) ,v293.Y + (v294.Y * v300) ,v293.Z + (v294.Z * v300) ,v295,v296,v297);if  not v831 then break;end local v833=math.abs(v832-v300 )<(0.002 + 0) ;v299,v300=v831,v832;if v833 then break;end end end return v299,v300;end end end local function v68(v301,v302) local v303=512 -(409 + 103) ;while true do if (v303==1) then return math.max(v301 * (386 -(46 + 190)) ,96 -(51 + 44) ),"PARTIAL";end if (v303==0) then if ((v301>=(1 + 1)) and (v302>=v64)) then return 1482 -(1114 + 203) ,"CHARGED";end if (v301>=(727 -(228 + 498))) then return 142.5,"FULL";end v303=1 + 0 ;end end end local v69={};local function v70(v304,v305,v306) local v307=0 + 0 ;local v308;local v309;while true do if (v307==(665 -(174 + 489))) then return v308.v;end if (v307==(2 -1)) then v309=v306-v308.t ;if (v309>=(1905.02 -(830 + 1075))) then local v805=0;local v806;while true do if (v805==0) then v806=(v305-v308.p)/v309 ;if (v806.Magnitude>(584 -(303 + 221))) then v806=v806.Unit * 60 ;end v805=1270 -(231 + 1038) ;end if (v805==(1 + 0)) then v308.v=v308.v + ((v806-v308.v) * (1162.35 -(171 + 991))) ;v308.p,v308.t=v305,v306;break;end end end v307=8 -6 ;end if (v307==(0 -0)) then v308=v69[v304];if  not v308 then v69[v304]={p=v305,t=v306,v=Vector3.new(0 -0 ,0,0 + 0 )};return Vector3.new(0 -0 ,0,0 -0 );end v307=1 -0 ;end end end local v71=RaycastParams.new();v71.FilterType=Enum.RaycastFilterType.Exclude;local v74=nil;local function v75(v310) local v311=0;local v312;local v313;local v314;while true do if (v311==1) then if  not v312 then return true;end v313,v314=pcall(function() local v743=v312.CFrame.Position + Vector3.new(0,18 -12 ,1248 -(111 + 1137) ) ;return v2:Raycast(v743,Vector3.new(0, -12,158 -(91 + 67) ));end);v311=5 -3 ;end if (v311==2) then v74=(v313 and (v314~=nil) and true) or false ;v63.losOK=v74;v311=3;end if (v311==(0 + 0)) then if (v74~=nil) then return v74;end v312=v310 and v310:FindFirstChild("HumanoidRootPart") ;v311=1;end if (v311==(526 -(423 + 100))) then return v74;end end end local function v76(v315,v316,v317,v318) if  not v75(v317) then return true;end local v319=v316-v315 ;local v320=v319.Magnitude;if (v320<(1 + 0)) then return true;end local v321,v322=pcall(function() local v574=0 -0 ;while true do if ((0 + 0)==v574) then v71.FilterDescendantsInstances={v317,v318};return v2:Raycast(v315,v319,v71);end end end);if  not v321 then return true;end return v322==nil ;end local v77=nil;local function v78() v77=nil;end local function v79(v323,v324) if  not v77 then v77={n=0 -0 ,t0=v323,s0=0,s1=0,s2=0 -0 ,s3=711 -(530 + 181) ,s4=881 -(614 + 267) ,y0=32 -(19 + 13) ,y1=0,y2=0 -0 };end local v325=v77;local v326=v323-v325.t0 ;local v327=v326 * v326 ;v325.n=v325.n + (2 -1) ;v325.s0=v325.s0 + (2 -1) ;v325.s1=v325.s1 + v326 ;v325.s2=v325.s2 + v327 ;v325.s3=v325.s3 + (v327 * v326) ;v325.s4=v325.s4 + (v327 * v327) ;v325.y0=v325.y0 + v324 ;v325.y1=v325.y1 + (v324 * v326) ;v325.y2=v325.y2 + (v324 * v327) ;v325.span=v326;end local function v80() local v338=0 + 0 ;local v339;local v340;local v341;local v342;local v343;local v344;local v345;local v346;local v347;local v348;local v349;local v350;local v351;local v352;local v353;while true do if (v338==2) then if (math.abs(v350)<1e-12) then return nil;end v351=v349(v340,v341,v339.y0,v343,v344,v339.y1,v346,v347,v339.y2);v352=v351/v350 ;v353= -(3 -1) * v352 ;v338=6 -3 ;end if (v338==(1813 -(1293 + 519))) then v346,v347,v348=v339.s2,v339.s3,v339.s4;v349=nil;function v349(v745,v746,v747,v748,v749,v750,v751,v752,v753) return ((v745 * ((v749 * v753) -(v750 * v752))) -(v746 * ((v748 * v753) -(v750 * v751)))) + (v747 * ((v748 * v752) -(v749 * v751))) ;end v350=v349(v340,v341,v342,v343,v344,v345,v346,v347,v348);v338=3 -1 ;end if (v338==3) then if ((v353<(52 -32)) or (v353>(5736 -2736))) then return nil;end return v353;end if (v338==0) then v339=v77;if ( not v339 or (v339.n<(34 -26)) or ((v339.span or (0 -0))<(0.12 + 0))) then return nil;end v340,v341,v342=v339.s0,v339.s1,v339.s2;v343,v344,v345=v339.s1,v339.s2,v339.s3;v338=1;end end end local v81=false;task.spawn(function() local v354,v355,v356=0 + 0 ,false,false;local v357,v358=nil,nil;local v359,v360,v361=nil,false,false;local v362=false;local v363,v364=nil,nil;while v5.running do local v575=v5.cfg;local v576=os.clock();local v577=(v363 and (v576-v363)) or v62 ;v363=v576;if (v577<=0) then v577=v62;elseif (v577>(0.25 -0)) then v577=0.25 + 0 ;end if (v576>=v354) then v354=v576 + 0.1 + 0 ;local v659=pcall(function() v357=v3.Character;local v755=v3.Team;v355=(v755 and (v755.Name=="Killer") and true) or false ;v358=v357 and v357:FindFirstChild("Humanoid") ;v356=v357 and (v357:GetAttribute("spearmode")==true) ;if v357 then v75(v357);end end);if  not v659 then v355,v356=false,false;end end local v578=false;if  not v81 then local v660,v661=pcall(ismouse1pressed);v578=(v660 and v661 and true) or false ;end if (v578 and  not v360) then v359,v361=v576,true;elseif ( not v578 and v360 and v361) then local v808=(v359 and (v576-v359)) or (0 + 0) ;if ((v808>=(1098 -(709 + 387))) and (v576>=v64)) then v64=v576 + (1888 -(673 + 1185)) ;end v359,v361=nil,false;end v360=v578;local v579=(v359 and math.min(v576-v359 ,19 -12 )) or (0 -0) ;v63.hold=v579;v63.cd=math.max(0 -0 ,v64-v576 );v63.charging=v359~=nil ;if (v575.va_autocal or true) then local v662=0 + 0 ;local v663;while true do if (1==v662) then if v663 then if  not v362 then v78();end v362=true;pcall(function() local v922=0;local v923;while true do if (v922==0) then v923=v663.PrimaryPart or v663:FindFirstChild("Spear1") ;if v923 then v79(v576,v923.Position.Y);end break;end end end);elseif v362 then v362=false;local v977=v80();if v977 then local v1001=0 + 0 ;local v1002;while true do if (v1001==(2 -0)) then if v575.va_autocal then local v1069=0;local v1070;local v1071;while true do if (v1069==(1 + 0)) then v575.va_gmult=v1070 + ((v63.gmult-v1070) * v1071) ;break;end if (v1069==(0 -0)) then v1070=v575.va_gmult or 1 ;v1071=(((v63.measN or (0 -0))<=1) and (1881 -(446 + 1434))) or (1283.6 -(1040 + 243)) ;v1069=2 -1 ;end end end break;end if (v1001==(1848 -(559 + 1288))) then v63.measN=(v63.measN or (1931 -(609 + 1322))) + (455 -(13 + 441)) ;v63.gmult=v977/v1002 ;v1001=7 -5 ;end if (v1001==(0 -0)) then v1002=v61();v63.measG=v977;v1001=4 -3 ;end end end v78();end break;end if (v662==(0 + 0)) then v663=nil;pcall(function() v663=v2:FindFirstChild("Spearprojectile");end);v662=1;end end end local v583=v575.va_enabled and v355 and v356 and v9() ;if (v583 and v575.va_holdOnly and  not v63.charging) then v583=false;end if  not v583 then v63.target,v63.solved,v63.dist=nil,false,nil;v63.speed,v63.flight,v63.drop,v63.tier=nil,nil,nil,nil;v364,v63.held=nil,false;else local v672=0;local v673;local v674;local v675;while true do if (v672==(7 -5)) then if (v673 and v674 and v675) then local v895=0;local v896;while true do if (v895==(0 + 0)) then v896=pcall(function() local v1003=v674.CFrame;local v1004=v1003.LookVector;local v1005=v675.CFrame;local v1006;if v575.va_originCam then v1006=v1003.Position;else v1006=v1005.Position + (v1005.LookVector * (2 + 1)) + Vector3.new(0 -0 ,1.5 + 0 ,0 -0 ) ;end local v1007,v1008=v68(v579,v576);local v1009=v61() * (v575.va_gmult or 1) ;local v1010=math.cos(math.rad(v575.va_fov));local v1011,v1012,v1013,v1014;local v1015,v1016,v1017;for v1031,v1032 in ipairs(v0:GetPlayers()) do if (v1032~=v3) then local v1057=v1032.Team;if (v1057 and (v1057.Name=="Survivors")) then local v1072=v1032.Character;local v1073=v1072 and v1072:FindFirstChild("HumanoidRootPart") ;local v1074=v1072 and v1072:FindFirstChild("Humanoid") ;local v1075=v1074 and v1074.Health ;if (v1073 and ((type(v1075)~="number") or (v1075>(0 + 0)))) then local v1080=0;local v1081;local v1082;local v1083;while true do if (v1080==(0 + 0)) then v1081=v1073.Position + Vector3.new(0,v575.va_aimHeight or (0 + 0) ,0 + 0 ) ;v1082=v1081-v1006 ;v1080=1 + 0 ;end if ((434 -(153 + 280))==v1080) then v1083=v1082.Magnitude;if ((v1083>(2 -1)) and (v1083<=v575.va_range)) then local v1091=0 + 0 ;local v1092;local v1093;while true do if (v1091==(1 + 0)) then if ((v1093>=v1010) and ( not v1011 or (v1083<v1014) or v1092)) then local v1095=0;local v1096;local v1097;local v1098;while true do if (v1095==0) then v1096=(v575.va_lead and v70(v1032.Name,v1073.Position,v576)) or nil ;v1097,v1098=v67(v1006,v1081,v1096,v1007,v1009,v575.va_euler);v1095=1;end if ((1 + 0)==v1095) then if (v1097 and ( not v575.va_los or v76(v1006,v1081,v357,v1072))) then if v1092 then v1015,v1016,v1017=v1097,v1098,v1083;end if ( not v1011 or (v1083<v1014)) then v1011=v1032.Name;v1012,v1013,v1014=v1097,v1098,v1083;end end break;end end end break;end if (v1091==(0 + 0)) then v1092=v575.va_sticky and (v364==v1032.Name) ;v1093=v1082.Unit:Dot(v1004);v1091=1 + 0 ;end end end break;end end end end end end if v1015 then v1011=v364;v1012,v1013,v1014=v1015,v1016,v1017;end v364=v1011;v63.held=v1015~=nil ;v63.target=v1011;v63.speed=v1007;v63.tier=v1008;v63.dist=v1014;v63.flight=v1013;v63.solved=v1012~=nil ;v63.drop=(v1013 and (((0.5 -0) * v1009 * v1013 * v1013) + ((0.5 + 0) * v1009 * v62 * v1013))) or nil ;if v1012 then local v1044=0;local v1045;local v1046;while true do if (v1044==(668 -(89 + 578))) then if (v1046>(1 + 0)) then local v1084=0 -0 ;local v1085;local v1086;local v1087;while true do if (v1084==(1050 -(572 + 477))) then v1087=v1004 + ((v1045-v1004) * v1086) ;if (v1087.Magnitude>(0.0001 + 0)) then v1045=v1087.Unit;end break;end if (v1084==0) then v1085=(v1046-1) * (0.015 + 0) ;v1086=(1 + 0) -math.exp( -v577/v1085 ) ;v1084=87 -(84 + 2) ;end end end v59(v673,v1045);break;end if (v1044==0) then v1045=v1012;v1046=v575.va_smooth or 1 ;v1044=1 -0 ;end end end end);if  not v896 then v63.solved=false;end break;end end else v63.solved=false;end break;end if (v672==1) then v674=v2.CurrentCamera;v675=v357 and v357:FindFirstChild("HumanoidRootPart") ;v672=2 + 0 ;end if (v672==0) then v673=v57();v63.addr=v673~=nil ;v672=843 -(497 + 345) ;end end end task.wait((1 + 0)/144 );end end);local v82,v83=11 + 49 ,1453 -(605 + 728) ;local v84,v85=320 + 128 ,915 -503 ;local v86=6 + 112 ;local v87=125 -91 ;local v88=false;local function v89(v365,v366,v367) return Color3.fromRGB(v365,v366,v367);end local v90={{name="Midnight",bg=v89(16,43 -27 ,19 + 5 ),bg2=v89(23,512 -(457 + 32) ,15 + 19 ),bar=v89(40,1431 -(832 + 570) ,74 + 4 ),barTo=v89(5 + 14 ,59 -42 ,19 + 19 ),panel=v89(825 -(588 + 208) ,78 -49 ,1844 -(884 + 916) ),border=v89(108 -56 ,28 + 19 ,735 -(232 + 421) ),accent=v89(2023 -(1569 + 320) ,26 + 78 ,49 + 206 ),accent2=v89(323 -227 ,204,255),on=v89(94,214,142),off=v89(675 -(316 + 289) ,183 -113 ,92),text=v89(237,11 + 226 ,249),dim=v89(1598 -(666 + 787) ,570 -(360 + 65) ,176),warn=v89(246,176 + 12 ,348 -(79 + 175) ),bad=v89(374 -136 ,102,86 + 24 ),shadow=v89(0 -0 ,0,0 -0 ),knob=v89(1146 -(503 + 396) ,428 -(92 + 89) ,253)},{name="Ember",bg=v89(11 + 9 ,14,8 + 4 ),bg2=v89(109 -81 ,20,17),bar=v89(12 + 72 ,72 -40 ,16),barTo=v89(32 + 4 ,9 + 8 ,33 -22 ),panel=v89(35,24,20),border=v89(10 + 68 ,49,55 -18 ),accent=v89(255,1376 -(485 + 759) ,124 -70 ),accent2=v89(255,1387 -(442 + 747) ,1219 -(832 + 303) ),on=v89(1178 -(88 + 858) ,46 + 102 ,54),off=v89(84,62,45 + 9 ),text=v89(11 + 240 ,239,1020 -(766 + 23) ),dim=v89(878 -700 ,148,181 -48 ),warn=v89(671 -416 ,699 -493 ,110),bad=v89(1313 -(1036 + 37) ,61 + 25 ,139 -67 ),shadow=v89(0,0,0 + 0 ),knob=v89(253,246,240)},{name="Toxic",bg=v89(12,933 -(910 + 3) ,35 -21 ),bg2=v89(1701 -(1466 + 218) ,28,20),bar=v89(24,34 + 38 ,38),barTo=v89(1160 -(556 + 592) ,12 + 20 ,827 -(329 + 479) ),panel=v89(21,889 -(174 + 680) ,85 -60 ),border=v89(86 -44 ,55 + 21 ,789 -(396 + 343) ),accent=v89(124,22 + 220 ,1597 -(29 + 1448) ),accent2=v89(1593 -(135 + 1254) ,960 -705 ,550 -432 ),on=v89(124,162 + 80 ,1647 -(389 + 1138) ),off=v89(632 -(102 + 472) ,78 + 4 ,64),text=v89(130 + 103 ,235 + 16 ,235),dim=v89(1682 -(320 + 1225) ,314 -137 ,89 + 56 ),warn=v89(232,1696 -(157 + 1307) ,110),bad=v89(2105 -(821 + 1038) ,110,239 -143 ),shadow=v89(0 + 0 ,0,0 -0 ),knob=v89(91 + 153 ,627 -374 ,1270 -(834 + 192) )},{name="Abyss",bg=v89(3 + 7 ,1 + 15 ,39 -13 ),bg2=v89(319 -(300 + 4) ,23,36),bar=v89(5 + 11 ,141 -87 ,452 -(112 + 250) ),barTo=v89(4 + 6 ,59 -35 ,44),panel=v89(11 + 8 ,29,24 + 21 ),border=v89(27 + 8 ,31 + 31 ,70 + 23 ),accent=v89(86,196,255),accent2=v89(128,240,220),on=v89(88,1628 -(1001 + 413) ,396 -218 ),off=v89(937 -(244 + 638) ,767 -(627 + 66) ,291 -193 ),text=v89(833 -(512 + 90) ,243,2161 -(1665 + 241) ),dim=v89(848 -(373 + 344) ,158,86 + 104 ),warn=v89(246,53 + 145 ,104),bad=v89(633 -393 ,175 -71 ,1223 -(35 + 1064) ),shadow=v89(0 + 0 ,0 -0 ,0 + 0 ),knob=v89(1476 -(298 + 938) ,250,1514 -(233 + 1026) )},{name="Rosewood",bg=v89(12 + 10 ,12 + 0 ,20),bg2=v89(30,17,9 + 19 ),bar=v89(6 + 78 ,245 -(55 + 166) ,60),barTo=v89(8 + 30 ,13,3 + 26 ),panel=v89(141 -104 ,318 -(36 + 261) ,33),border=v89(134 -57 ,1410 -(34 + 1334) ,26 + 40 ),accent=v89(199 + 56 ,1393 -(1035 + 248) ,201 -(20 + 1) ),accent2=v89(133 + 122 ,172,531 -(134 + 185) ),on=v89(1359 -(549 + 584) ,807 -(314 + 371) ,652 -462 ),off=v89(1051 -(478 + 490) ,30 + 26 ,74),text=v89(1425 -(786 + 386) ,761 -526 ,247),dim=v89(1564 -(1055 + 324) ,1481 -(1093 + 247) ,151 + 18 ),warn=v89(250,196,13 + 107 ),bad=v89(976 -730 ,311 -219 ,313 -203 ),shadow=v89(0 -0 ,0 + 0 ,0),knob=v89(978 -724 ,244,861 -611 )},{name="Paper",bg=v89(610 -371 ,927 -(364 + 324) ,246),bg2=v89(685 -435 ,599 -349 ,84 + 169 ),bar=v89(953 -725 ,228,240),barTo=v89(330 -123 ,207,686 -460 ),panel=v89(1495 -(1249 + 19) ,227,239),border=v89(179 + 19 ,770 -572 ,1302 -(686 + 400) ),accent=v89(70 + 18 ,299 -(73 + 156) ,2 + 218 ),accent2=v89(835 -(721 + 90) ,148,3 + 195 ),on=v89(38,158,285 -197 ),off=v89(644 -(224 + 246) ,281 -107 ,353 -161 ),text=v89(5 + 22 ,1 + 26 ,40),dim=v89(80 + 28 ,214 -106 ,130),warn=v89(585 -409 ,631 -(203 + 310) ,2013 -(1238 + 755) ),bad=v89(198,48,5 + 53 ),shadow=v89(1652 -(709 + 825) ,217 -99 ,206 -64 ),knob=v89(1119 -(196 + 668) ,1006 -751 ,528 -273 )}};local v91={};local function v92(v368) local v369=v90[1];local v370=v90[v368] or v369 ;for v584,v585 in pairs(v369) do v91[v584]=v370[v584] or v585 ;end end v92(v5.cfg.theme);local function v93(v371,v372,v373) return Color3.fromRGB(math.floor((v371.R * 255) + (((v372.R * 255) -(v371.R * 255)) * v373) + 0.5 ),math.floor((v371.G * 255) + (((v372.G * 255) -(v371.G * (1088 -(171 + 662)))) * v373) + (93.5 -(4 + 89)) ),math.floor((v371.B * (893 -638)) + (((v372.B * (93 + 162)) -(v371.B * 255)) * v373) + (0.5 -0) ));end local v94=1607 + 2489 ;local v95=0;local v96="UI(default 0)";do local v374=Drawing.Fonts;if (type(v374)=="table") then for v676,v677 in ipairs({"SystemBold","System","UI"}) do local v678=v374[v677];if (type(v678)=="number") then v95,v96=v678,v677;break;end end end end local v97,v98={},{};local v99=false;local function v100(v375) local v376=Drawing.new("Square");v376.Filled=true;v376.Visible=false;if v99 then pcall(function() v376.ZIndex=v375;end);end return v376;end local function v101(v379) local v380=Drawing.new("Text");v380.Size=14;v380.Font=v95;v380.Visible=false;if v99 then pcall(function() v380.ZIndex=v94 + v379 ;end);end return v380;end v97[1]=v100(1 + 0 );v99=pcall(function() v97[1515 -(822 + 692) ].ZIndex=1;end);for v385=2 -0 ,95 + 105  do v97[v385]=v100(v385);end for v387=1,393 -(45 + 252)  do v98[v387]=v101(v387);end local v103,v104=0,0 + 0 ;local v105=1 + 0 ;local function v106(v389,v390,v391,v392,v393,v394,v395) local v396=0;local v397;while true do if (v396==(2 -1)) then v397.Size=Vector2.new(v391,v392);v397.Color=v393;v397.Filled=true;v397.Thickness=434 -(114 + 319) ;v396=2;end if (0==v396) then v103=v103 + 1 ;v397=v97[v103];if  not v397 then local v809=0 -0 ;while true do if (v809==(0 -0)) then v397=v100(v103);v97[v103]=v397;break;end end end v397.Position=Vector2.new(v389,v390);v396=1;end if ((2 + 0)==v396) then v397.Rounding=v394 or 0 ;v397.Transparency=v395 or v105 ;v397.Visible=true;return v397;end end end local function v107(v398,v399,v400,v401,v402,v403,v404,v405) local v406=0 -0 ;local v407;while true do if (v406==3) then v407.Transparency=v404 or v105 ;v407.Visible=true;return v407;end if (v406==0) then v103=v103 + (1 -0) ;v407=v97[v103];if  not v407 then local v810=1963 -(556 + 1407) ;while true do if (v810==(1206 -(741 + 465))) then v407=v100(v103);v97[v103]=v407;break;end end end v406=466 -(170 + 295) ;end if (v406==(2 + 0)) then v407.Filled=false;v407.Thickness=v405 or 1 ;v407.Rounding=v403 or (0 + 0) ;v406=3;end if (v406==(2 -1)) then v407.Position=Vector2.new(v398,v399);v407.Size=Vector2.new(v400,v401);v407.Color=v402;v406=2 + 0 ;end end end local function v108(v408,v409,v410,v411,v412,v413,v414) local v415=0 + 0 ;local v416;while true do if ((1 + 0)==v415) then v416.Text=v408;v416.Position=Vector2.new(v409,v410);v416.Size=v411 or (1244 -(957 + 273)) ;v415=1 + 1 ;end if (v415==0) then v104=v104 + 1 ;v416=v98[v104];if  not v416 then local v811=0;while true do if (v811==0) then v416=v101(v104);v98[v104]=v416;break;end end end v415=1 + 0 ;end if (v415==3) then v416.Visible=true;return v416;end if (v415==(7 -5)) then v416.Color=v412 or v91.text ;v416.Center=v413 or false ;v416.Transparency=v414 or v105 ;v415=7 -4 ;end end end local function v109(v417,v418,v419,v420,v421,v422,v423,v424) local v425=0 -0 ;local v426;while true do if (v425==(0 -0)) then v423=v423 or (1792 -(389 + 1391)) ;v426=v420/v423 ;v425=1 + 0 ;end if (v425==(1 + 0)) then for v756=0 -0 ,v423-(952 -(783 + 168))  do local v757=v93(v421,v422,v756/(v423-1) );v106(v417,v418 + (v756 * v426) ,v419,v426 + 1 ,v757,(((v756==(0 -0)) or (v756==(v423-(1 + 0)))) and v424) or (311 -(309 + 2)) );end break;end end end local v110,v111=false,false;local v112,v113={},{};local function v114(v427,v428,v429,v430,v431) v112[v427]={x=v428,y=v429,w=v430,h=v431};end local function v115(v433,v434,v435) return (v434>=v433.x) and (v434<=(v433.x + v433.w)) and (v435>=v433.y) and (v435<=(v433.y + v433.h)) ;end local v116=nil;local v117=nil;local v118,v119=false,{x=0 -0 ,y=0};local v120=1218 -(1090 + 122) ;local function v121(v436,v437,v438,v439) v108(v436:upper(),v437,v438,4 + 7 ,v91.dim);v106(v437,v438 + (50 -35) ,v439,1 + 0 ,v91.border);return 22;end local function v122(v440,v441,v442,v443) local v444=1118 -(628 + 490) ;while true do if (0==v444) then v106(v440,v441,v442,v443,v91.bg2,v120);v107(v440,v441,v442,v443,v91.border,v120);break;end end end local function v123(v445,v446,v447,v448,v449,v450) local v451="tg_"   .. v445 ;local v452=v449();local v453=v117==v451 ;v106(v446-(2 + 4) ,v447-(7 -4) ,v448 + 12 ,127 -99 ,(v453 and v91.panel) or v91.bg2 ,v120,(v453 and v105) or math.min(v105,774.55 -(431 + 343) ) );v108(v445,v446,v447 + 3 ,27 -13 ,(v452 and v91.text) or v91.dim );local v454,v455=115 -75 ,20;local v456=(v446 + v448) -v454 ;v106(v456,v447 + 1 + 0 ,v454,v455,(v452 and v91.accent) or v91.off ,v455/(1 + 1) );if v452 then v107(v456-(1697 -(556 + 1139)) ,v447-(16 -(6 + 9)) ,v454 + 1 + 3 ,v455 + 4 ,v91.accent,(v455 + 3 + 1)/(171 -(28 + 141)) ,0.35 + 0 );end v106((v452 and ((v456 + v454) -(21 -3))) or (v456 + 2) ,v447 + 3 + 0 ,16,1333 -(486 + 831) ,v91.knob,20 -12 );v114(v451,v446-6 ,v447-(10 -7) ,v448 + 3 + 9 ,28);if (v116==v451) then v450( not v452);end return 100 -68 ;end local function v124(v457,v458,v459,v460,v461,v462) local v463="cp_"   .. v457 ;local v464=v461();local v465=v117==v463 ;v106(v458,v459,v460,1287 -(668 + 595) ,(v464 and v91.accent) or v91.panel ,v120,(v464 and v105) or math.min(v105,0.8 + 0 ) );if v465 then v107(v458,v459,v460,5 + 19 ,(v464 and v91.accent2) or v91.border ,v120);end v106(v458 + (21 -13) ,v459 + (298 -(23 + 267)) ,8,1952 -(1129 + 815) ,(v464 and v91.knob) or v91.off ,391 -(371 + 16) );v108(v457,v458 + (1772 -(1326 + 424)) ,v459 + (7 -3) ,43 -31 ,(v464 and v91.knob) or v91.dim );v114(v463,v458,v459,v460,24);if (v116==v463) then v462( not v464);end return 146 -(88 + 30) ;end local function v125(v466,v467,v468,v469,v470,v471,v472,v473,v474,v475) local v476=0;local v477;local v478;local v479;local v480;local v481;local v482;while true do if (v476==0) then v477=v470();v108(v466,v467,v468 + (775 -(720 + 51)) ,13,v91.dim);v478=24;v479=((v467 + v469) -(v478 * 2)) -4 ;v476=2 -1 ;end if (v476==(1777 -(421 + 1355))) then v480=(v467 + v469) -v478 ;v106(v479-70 ,v468,66,22,v91.panel,v120);v108((v475 or "%s"):format(v477),v479-(60 -23) ,v468 + 2 + 1 ,1096 -(286 + 797) ,v91.text,true);v481,v482=v117==("minus_"   .. v466) ,v117==("plus_"   .. v466) ;v476=2;end if (v476==(7 -5)) then v106(v479,v468,v478,22,(v481 and v91.accent) or v91.panel ,v120);v108("-",v479 + (v478/(2 -0)) ,v468 + 1 ,455 -(397 + 42) ,(v481 and v91.knob) or v91.text ,true);v106(v480,v468,v478,7 + 15 ,(v482 and v91.accent) or v91.panel ,v120);v108("+",v480 + (v478/(802 -(24 + 776))) ,v468 + (1 -0) ,801 -(222 + 563) ,(v482 and v91.knob) or v91.text ,true);v476=6 -3 ;end if (v476==(3 + 1)) then return 26;end if (v476==(193 -(23 + 167))) then v114("minus_"   .. v466 ,v479,v468,v478,22);v114("plus_"   .. v466 ,v480,v468,v478,1820 -(690 + 1108) );if (v116==("minus_"   .. v466)) then v471(math.max(v472,v477-v474 ));end if (v116==("plus_"   .. v466)) then v471(math.min(v473,v477 + v474 ));end v476=2 + 2 ;end end end local function v126(v483,v484,v485,v486,v487,v488) local v489=0 + 0 ;local v490;while true do if (v489==(849 -(40 + 808))) then if v490 then local v812=0 + 0 ;local v813;local v814;local v815;while true do if (v812==1) then if (v814 and v815) then v813=v815.X;end v490.Position=Vector2.new((v485 + v487) -v813 ,v486);break;end if (v812==(0 -0)) then v813=0 + 0 ;v814,v815=pcall(function() return v490.TextBounds;end);v812=1;end end end return 17;end if (v489==0) then v108(v483,v485,v486,12,v91.dim);v490=v108(v484,v485,v486,12,v488 or v91.text );v489=1 + 0 ;end end end local function v127(v491,v492,v493,v494,v495) local v496=0;local v497;local v498;local v499;while true do if (v496==1) then v499=v117==v498 ;if v497 then local v816=0 + 0 ;while true do if (0==v816) then v106(v493,v494,v495,601 -(47 + 524) ,v91.accent,v120,math.min(v105,0.2 + 0 ));v106(v493,v494 + (13 -8) ,4 -1 ,45 -25 ,v91.accent,2);break;end end elseif v499 then v106(v493,v494,v495,1756 -(1165 + 561) ,v91.panel,v120);end v496=1 + 1 ;end if (2==v496) then v108(v491,v493 + (37 -25) ,v494 + 7 ,14,(v497 and v91.accent) or v91.dim );v114(v498,v493,v494,v495,12 + 18 );v496=482 -(341 + 138) ;end if (v496==3) then if (v116==v498) then v5.tab=v492;end return 10 + 24 ;end if (v496==0) then v497=v5.tab==v492 ;v498="tab_"   .. v492 ;v496=1 -0 ;end end end local function v128(v500,v501,v502,v503) local v504=0;local v505;local v506;local v507;local v508;while true do if (v504==2) then v108(v505.name,v501 + 35 ,v502 + 8 ,339 -(89 + 237) ,(v506 and v505.accent) or v505.text );v114(v507,v501,v502,v503,32);if (v116==v507) then local v818=0 -0 ;while true do if ((0 -0)==v818) then v5.cfg.theme=v500;v92(v500);break;end end end return 917 -(581 + 300) ;end if (v504==1) then v106(v501,v502,v503,32,v505.panel,v120);if v506 then v107(v501,v502,v503,32,v505.accent,v120,nil,2);elseif v508 then v107(v501,v502,v503,32,v91.border,v120);end v106(v501 + (1228 -(855 + 365)) ,v502 + 10 ,28 -16 ,4 + 8 ,v505.accent,1241 -(1030 + 205) );v106(v501 + 23 ,v502 + 13 ,6 + 0 ,6 + 0 ,v505.accent2,289 -(156 + 130) );v504=4 -2 ;end if (v504==0) then v505=v90[v500];v506=v5.cfg.theme==v500 ;v507="th_"   .. v500 ;v508=v117==v507 ;v504=1;end end end local function v129() v103,v104=0 -0 ,0 -0 ;v112={};local v509=v5.cfg;v105=math.clamp(v509.ui_opacity or 1 ,0.35,1 + 0 );v120=math.floor(v509.ui_round or (4 + 2) );local v510,v511=v4.X,v4.Y;v111=v110;v110=(ismouse1pressed() and true) or false ;local v512=v110 and  not v111 ;v116,v117=nil,nil;for v587,v588 in pairs(v113) do if v115(v588,v510,v511) then v117=v587;if v512 then v116=v587;end break;end end local v513=(v88 and (69 -(10 + 59))) or (v85-v87) ;local v514=(v510>=v82) and (v510<=(v82 + v84)) and (v511>=v83) and (v511<=(v83 + v87 + v513)) ;if (v512 and v514) then v81=true;end if  not v110 then v81=false;end if (v116=="min") then v88= not v88;end if (v116=="cls") then task.spawn(function() if v5.stop then pcall(v5.stop);end end);return;end if (v512 and (v511>=v83) and (v511<=(v83 + v87)) and (v510>=v82) and (v510<=((v82 + v84) -64))) then local v605=0 + 0 ;while true do if (v605==(0 -0)) then v118=true;v119.x=v510-v82 ;v605=1;end if (v605==(1164 -(671 + 492))) then v119.y=v511-v83 ;break;end end end if  not v110 then v118=false;end if v118 then v82=v510-v119.x ;v83=v511-v119.y ;end local v515=v87 + v513 ;for v589=3 + 0 ,1216 -(369 + 846) , -(1 + 0) do v106(v82-(v589 * 2) ,(v83-(v589 * 2)) + 3 ,v84 + (v589 * 4) ,v515 + (v589 * 4) ,v91.shadow,v120 + (v589 * 2) ,(0.05 + 0) * v589 );end v106(v82,v83,v84,v515,v91.bg,v120);v109(v82,v83,v84,v87,v91.bar,v91.barTo,1955 -(1036 + 909) ,v120);v106(v82 + 12 ,v83 + 11 ,4 + 0 ,19 -7 ,v91.accent,205 -(11 + 192) );v106(v82 + 10 + 8 ,v83 + (189 -(135 + 40)) ,4,14 -8 ,v91.accent2,2 + 0 );local v516=v108("VIOLENCE DISTRICT",v82 + (66 -36) ,v83 + (5 -1) ,191 -(50 + 126) ,v91.text);local v517=417 -267 ;if v516 then local v606=0;local v607;local v608;while true do if (v606==(0 + 0)) then v607,v608=pcall(function() return v516.TextBounds;end);if (v607 and v608) then v517=v608.X;end break;end end end v108("HUB",v82 + (1451 -(1233 + 180)) + v517 ,v83 + 6 ,12,v91.accent);local v518,v519=v117=="min" ,v117=="cls" ;v106((v82 + v84) -(1025 -(522 + 447)) ,v83 + (1429 -(107 + 1314)) ,10 + 10 ,54 -36 ,(v518 and v91.panel) or v91.bg2 ,v120,(v518 and v105) or 0.6 );v106((v82 + v84) -51 ,v83 + 9 + 11 ,10,3 -1 ,v91.text,3 -2 );v114("min",(v82 + v84) -(1966 -(716 + 1194)) ,v83 + 1 + 7 ,3 + 17 ,18);v106((v82 + v84) -(533 -(74 + 429)) ,v83 + (14 -6) ,10 + 10 ,18,(v519 and v91.bad) or v91.bg2 ,v120,(v519 and v105) or (0.6 -0) );v108("x",(v82 + v84) -20 ,v83 + 4 + 1 ,45 -30 ,(v519 and v91.knob) or v91.bad ,true);v114("cls",(v82 + v84) -30 ,v83 + (19 -11) ,453 -(279 + 154) ,796 -(454 + 324) );if v88 then local v609=0 + 0 ;while true do if (v609==(17 -(12 + 5))) then for v836=v103 + 1 + 0 , #v97 do v97[v836].Visible=false;end for v838=v104 + (2 -1) , #v98 do v98[v838].Visible=false;end v609=1;end if (v609==(1 + 0)) then v113=v112;return;end end end v106(v82,v83 + v87 ,v86,v513,v91.bg2,1093 -(277 + 816) ,v105);v106(v82 + v86 ,v83 + v87 ,1,v513,v91.border);local v520=v83 + v87 + (42 -32) ;v520=v520 + v127("Pallet","pallet",v82 + (1191 -(1058 + 125)) ,v520,v86-(3 + 13) ) ;v520=v520 + v127("Skillcheck","skill",v82 + 8 ,v520,v86-(991 -(815 + 160)) ) ;v520=v520 + v127("Vault","vault",v82 + (34 -26) ,v520,v86-16 ) ;v520=v520 + v127("Veil Aim","veil",v82 + (18 -10) ,v520,v86-16 ) ;local v521=(v83 + v515) -(11 + 31) ;v106(v82 + (23 -15) ,v521-(1908 -(41 + 1857)) ,v86-(1909 -(1222 + 671)) ,2 -1 ,v91.border);v127("Settings","settings",v82 + (11 -3) ,v521,v86-(1198 -(229 + 953)) );local v522=v9();if ( not v522 and (v5.tab~="pallet") and (v5.tab~="settings")) then v108("Unsafe LuaU OFF",v82 + (1786 -(1111 + 663)) ,(v83 + v515) -66 ,11,v91.bad);end local v523=v82 + v86 + (1595 -(874 + 705)) ;local v524=(v84-v86) -(5 + 27) ;local v525=v83 + v87 + 10 + 4 ;if (v5.tab=="pallet") then local v610=0 -0 ;local v611;local v612;local v613;while true do if (v610==2) then v122(v523-(1 + 7) ,v525,v524 + (695 -(642 + 37)) ,22 + 74 );v611,v612,v613=v525 + 2 + 8 ,v523,v524;v611=v611 + v126("Pallets tracked",tostring( #v14),v612,v611,v613,v91.text) ;v611=v611 + v126("Killer visible",(( #v17>(0 -0)) and "YES") or "--" ,v612,v611,v613,(( #v17>(454 -(233 + 221))) and v91.warn) or v91.dim ) ;v610=6 -3 ;end if (v610==(4 + 0)) then v108(((v19.hp==false) and "Health <= 50 -- the game blocks the drop") or "Key: SPACE" ,v523,v525,11,((v19.hp==false) and v91.bad) or v91.dim );break;end if (v610==(1541 -(718 + 823))) then v525=v525 + v123("Auto Pallet",v523,v525,v524,function() return v509.p_enabled;end,function(v840) v509.p_enabled=v840;end) ;v525=v525 + 4 + 2 ;v525=v525 + v121("Stun box",v523,v525,v524) ;v525=v525 + v125("Interact radius",v523,v525,v524,function() return v509.interactionRadius;end,function(v842) v509.interactionRadius=v842;end,806 -(266 + 539) ,30,1,"%d") ;v610=1;end if (v610==(8 -5)) then v611=v611 + v126("At a pallet",(v19.elig and "YES") or "--" ,v612,v611,v613,(v19.elig and v91.on) or v91.dim ) ;v611=v611 + v126("Stun zone",(v19.inZone and "FIRE") or "--" ,v612,v611,v613,(v19.inZone and v91.warn) or v91.dim ) ;v611=v611 + v126("Range  pallet / killer",("%s / %s"):format((v19.nearD and ("%.1f"):format(v19.nearD)) or "--" ,(v19.killD and ("%.1f"):format(v19.killD)) or "--" ),v612,v611,v613,v91.dim) ;v525=v525 + (1329 -(636 + 589)) ;v610=9 -5 ;end if (v610==1) then v525=v525 + v125("Stun reach",v523,v525,v524,function() return v509.stunReach;end,function(v844) v509.stunReach=v844;end,0 -0 ,12 + 3 ,1 + 0 ,"%d") ;v525=v525 + v125("Stun width",v523,v525,v524,function() return v509.stunWidth;end,function(v846) v509.stunWidth=v846;end,1015 -(657 + 358) ,15,2 -1 ,"%d") ;v525=v525 + v125("Stun height",v523,v525,v524,function() return v509.stunHeight;end,function(v848) v509.stunHeight=v848;end,0,15,2 -1 ,"%d") ;v525=v525 + (1197 -(1151 + 36)) ;v610=2 + 0 ;end end elseif (v5.tab=="skill") then local v758=0 + 0 ;while true do if (v758==(5 -3)) then v525=v525 + (1844 -(1552 + 280)) ;if  not v522 then v122(v523-(842 -(64 + 770)) ,v525,v524 + 11 + 5 ,140 -78 );v108("Unsafe LuaU is disabled",v523,v525 + 2 + 8 ,1256 -(157 + 1086) ,v91.bad);v108("Enable 'Allow Unsafe LuaU' in Matcha",v523,v525 + (55 -27) ,11,v91.warn);v108("settings -- the needle is read from memory.",v523,v525 + 42 ,48 -37 ,v91.warn);else local v924=0 -0 ;local v925;while true do if ((1 -0)==v924) then v925=v925 + v126("Line / Goal",("%s / %s"):format((v34.l and ("%.0f"):format(v34.l)) or "--" ,(v34.g and ("%.0f"):format(v34.g)) or "--" ),v523,v925,v524,v91.text) ;v925=v925 + v126("Window",tostring(v34.win or "--" ),v523,v925,v524,v91.dim) ;v924=821 -(599 + 220) ;end if ((3 -1)==v924) then v925=v925 + v126("Checks / hits",("%s / %s"):format(tostring(v36),tostring(v33)),v523,v925,v524,((v33>(1931 -(1813 + 118))) and v91.on) or v91.dim ) ;v925=v925 + v126("Offset","auto (+0xE8)",v523,v925,v524,v91.on) ;v924=3 + 0 ;end if (v924==(1217 -(841 + 376))) then v122(v523-(10 -2) ,v525,v524 + 4 + 12 ,218 -138 );v925=v525 + (869 -(464 + 395)) ;v924=1;end if (v924==3) then v525=v525 + (225 -137) ;v108("Chained checks accumulate past 360 -- handled.",v523,v525,11,v91.dim);break;end end end break;end if (v758==1) then v525=v525 + v121("Timing",v523,v525,v524) ;v525=v525 + v125("Lead (deg)",v523,v525,v524,function() return v509.sc_lead;end,function(v903) v509.sc_lead=v903;end,0,5 + 5 ,838 -(467 + 370) ,"%d") ;v758=3 -1 ;end if (v758==(0 + 0)) then v525=v525 + v123("Auto Skillcheck",v523,v525,v524,function() return v509.sc_enabled;end,function(v905) v509.sc_enabled=v905;end) ;v525=v525 + 6 ;v758=1;end end elseif (v5.tab=="vault") then v525=v525 + v123("Always Fast Vault",v523,v525,v524,function() return v509.fv_enabled;end,function(v873) v509.fv_enabled=v873;end) ;v525=v525 + 6 ;v525=v525 + v121("Gate",v523,v525,v524) ;v525=v525 + v125("Arm radius",v523,v525,v524,function() return v509.fv_radius;end,function(v875) v509.fv_radius=v875;end,13 -9 ,4 + 21 ,2 -1 ,"%d") ;v525=v525 + v125("Turn limit",v523,v525,v524,function() return v509.fv_target;end,function(v877) v509.fv_target=v877;end,520 -(150 + 370) ,1322 -(74 + 1208) ,4 -2 ,"%d deg") ;v525=v525 + 4 ;v124("Every angle",v523,v525,(v524/2) -(18 -14) ,function() return v509.fv_ignoreAxis;end,function(v879) v509.fv_ignoreAxis=v879;end);v525=v525 + 20 + 8 ;v525=v525 + (396 -(14 + 376)) ;v122(v523-(13 -5) ,v525,v524 + 11 + 5 ,85 + 11 );local v850=v525 + 10 + 0 ;v850=v850 + v126("Windows tracked",tostring( #v16),v523,v850,v524,v91.text) ;v850=v850 + v126("Vaults fixed",tostring(v37.vaults or (0 -0) ),v523,v850,v524,(((v37.vaults or (0 + 0))>(78 -(23 + 55))) and v91.on) or v91.dim ) ;v850=v850 + v126("At a window",(v37.near and "YES") or "--" ,v523,v850,v524,(v37.near and v91.on) or v91.dim ) ;local v851=v37.ang;v850=v850 + v126("Off-axis",(v851 and ("%.0f deg"):format(v851)) or "--" ,v523,v850,v524,(v851 and (v851<=(94 -54)) and v91.on) or (v851 and v91.bad) or v91.dim ) ;v850=v850 + v126("Speed",("%.1f"):format(v37.spd or 0 ),v523,v850,v524,(((v37.spd or (0 + 0))>(v509.fv_minSpeed or 15.5)) and v91.on) or v91.dim ) ;if v37.holding then v108("FORCING",(v523 + v524) -52 ,v525 + 9 + 1 ,12,v91.warn);end v525=v525 + 104 ;v108("Pass band is a bowtie: 0-40 and 140-180 deg.",v523,v525,11,v91.dim);elseif (v5.tab=="veil") then v525=v525 + v123("Veil Spear Aimbot",v523,v525,v524,function() return v509.va_enabled;end,function(v926) v509.va_enabled=v926;end) ;v525=v525 + (5 -1) ;v525=v525 + v121("Targeting",v523,v525,v524) ;v525=v525 + v125("FOV",v523,v525,v524,function() return v509.va_fov;end,function(v928) v509.va_fov=v928;end,2 + 3 ,90,906 -(652 + 249) ,"%d deg") ;v525=v525 + v125("Range",v523,v525,v524,function() return v509.va_range;end,function(v930) v509.va_range=v930;end,107 -67 ,400,20,"%d") ;v525=v525 + v125("Smoothing",v523,v525,v524,function() return v509.va_smooth;end,function(v932) v509.va_smooth=math.floor(v932 + 0.5 );end,1,20,1869 -(708 + 1160) ,"%d") ;v525=v525 + 6 ;local v907=(v524/(5 -3)) -(6 -2) ;v124("Lead target",v523,v525,v907,function() return v509.va_lead;end,function(v934) v509.va_lead=v934;end);v124("Euler fix",v523 + v907 + 8 ,v525,v907,function() return v509.va_euler;end,function(v936) v509.va_euler=v936;end);v525=v525 + 28 ;local v908=((v63.losOK==false) and "LOS: n/a here") or "Line of sight" ;v124(v908,v523,v525,v907,function() return v509.va_los;end,function(v938) v509.va_los=v938;end);v124("Auto-cal",v523 + v907 + 8 ,v525,v907,function() return v509.va_autocal;end,function(v940) v509.va_autocal=v940;end);v525=v525 + (55 -(10 + 17)) ;v124("Charge only",v523,v525,v907,function() return v509.va_holdOnly;end,function(v942) v509.va_holdOnly=v942;end);v124("Cam origin",v523 + v907 + 2 + 6 ,v525,v907,function() return v509.va_originCam;end,function(v944) v509.va_originCam=v944;end);v525=v525 + (1760 -(1400 + 332)) ;v124("Sticky aim (hold target)",v523,v525,v524,function() return v509.va_sticky;end,function(v946) v509.va_sticky=v946;end);v525=v525 + (64 -30) ;v122(v523-(1916 -(242 + 1666)) ,v525,v524 + 16 ,48 + 64 );local v909=v525 + 4 + 5 ;v909=v909 + v126("Target",(v63.target or "--")   .. ((v63.held and "   LOCK") or "") ,v523,v909,v524,(v63.held and v91.accent) or (v63.target and v91.on) or v91.dim ) ;v909=v909 + v126("Distance",(v63.dist and ("%.0f"):format(v63.dist)) or "--" ,v523,v909,v524,v91.text) ;v909=v909 + v126("Charge",("%.2fs  %s"):format(v63.hold or (0 + 0) ,v63.tier or "--" ),v523,v909,v524,((v63.tier=="CHARGED") and v91.warn) or v91.text ) ;v909=v909 + v126("Launch speed",(v63.speed and ("%.1f"):format(v63.speed)) or "--" ,v523,v909,v524,v91.text) ;v909=v909 + v126("Flight / drop",("%s / %s"):format((v63.flight and ("%.2fs"):format(v63.flight)) or "--" ,(v63.drop and ("%.1f"):format(v63.drop)) or "--" ),v523,v909,v524,v91.dim) ;v909=v909 + v126("GMult",(v63.gmult and ("%.3f  (%d arcs)"):format(v509.va_gmult or 1 ,v63.measN or (940 -(850 + 90)) )) or ("%.3f  (default)"):format(v509.va_gmult or (1 -0) ) ,v523,v909,v524,(v63.gmult and v91.on) or v91.warn ) ;v525=v525 + 120 ;if (v63.cd and (v63.cd>(1390.5 -(360 + 1030)))) then v108(("Charged throw on cooldown: %.0fs"):format(v63.cd),v523,v525,10 + 1 ,v91.warn);elseif ( not v63.addr and v509.va_enabled) then v108("Resolving camera address...",v523,v525,11,v91.warn);elseif v63.solved then v108("Solution locked -- release to throw.",v523,v525,30 -19 ,v91.on);else v108("Hold attack with a spear equipped to aim.",v523,v525,14 -3 ,v91.dim);end else v525=v525 + v121("Theme",v523,v525,v524) ;local v910=(v524/2) -(1665 -(909 + 752)) ;for v948=1, #v90 do local v949=(v948-(1224 -(109 + 1114)))%(3 -1) ;local v950=math.floor((v948-1)/(1 + 1) );v128(v948,v523 + (v949 * (v910 + (250 -(6 + 236)))) ,v525 + (v950 * (23 + 13)) ,v910);end v525=v525 + (math.ceil( #v90/2 ) * 36) + 7 + 1 ;v525=v525 + v121("Panel",v523,v525,v524) ;v525=v525 + v125("Opacity",v523,v525,v524,function() return v509.ui_opacity;end,function(v951) v509.ui_opacity=math.floor((v951 * (47 -27)) + (0.5 -0) )/20 ;end,1133.35 -(1076 + 57) ,1 + 0 ,0.05,"%.2f") ;v525=v525 + v125("Corner radius",v523,v525,v524,function() return v509.ui_round;end,function(v953) v509.ui_round=v953;end,0,703 -(579 + 110) ,2,"%d px") ;v525=v525 + 1 + 11 ;v108("Settings are not persisted -- a reload resets",v523,v525,10 + 1 ,v91.dim);v525=v525 + 8 + 6 ;v108("every toggle on every tab.",v523,v525,418 -(174 + 233) ,v91.dim);v525=v525 + (50 -32) ;v108("Stop the hub:  _G.vdHub.stop()",v523,v525,19 -8 ,v91.accent);end for v590=v103 + 1 + 0 , #v97 do v97[v590].Visible=false;end for v592=v104 + (1175 -(663 + 511)) , #v98 do v98[v592].Visible=false;end v113=v112;end local v130;v130=v1.RenderStepped:Connect(v129);v5.stop=function() v5.running=false;if v130 then v130:Disconnect();end for v594=1 + 0 , #v97 do pcall(function() v97[v594]:Remove();end);end for v595=1 + 0 , #v98 do pcall(function() v98[v595]:Remove();end);end _G.vdHub=nil;end;v5.debug=function() return {pallets= #v14,blockers= #v15,killerRoots= #v17,stat=v19,scHits=v33,scChecks=v36,scLine=v34.l,scGoal=v34.g,scWin=v34.win,vaults= #v16,fv=v37,veil=v63,camAddr=v54,baseG=v61(),theme=(v90[v5.cfg.theme] or {}).name};end;v5.veilRecal=function() v54,v55,v56=nil,nil,0;return v57();end;v5.uiDiag=function() print("---- vdHub UI diagnostic ----");print(("ZIndex writable : %s   (false = draw order is up to the executor)"):format(tostring(v99)));print(("Font in use     : %d (%s)  resolved by name, not index"):format(v95,v96));local v527=Drawing.Fonts;if (type(v527)=="table") then local v614={};for v708,v709 in pairs(v527) do v614[ #v614 + (2 -1) ]=tostring(v708)   .. "="   .. tostring(v709) ;end table.sort(v614);print("Drawing.Fonts   : "   .. table.concat(v614,", ") );else print("Drawing.Fonts   : "   .. type(v527)   .. " (not a table)" );end print(("pools           : %d squares, %d texts"):format( #v97, #v98));local v528=v98[1];if v528 then local v615=0 + 0 ;local v616;local v617;local v618;local v619;local v620;local v621;while true do if (v615==(4 -2)) then v620,v621=pcall(function() return v528.ZIndex;end);print(("Text[1].ZIndex  : %s  (expect %d)"):format((v620 and tostring(v621)) or "unsupported" ,v94 + (2 -1) ));break;end if (v615==(0 + 0)) then v616,v617=pcall(function() return v528.TextBounds;end);print(("TextBounds      : %s  (false breaks right-aligned values)"):format((v616 and tostring(v617)) or "unsupported" ));v615=1;end if (v615==(1 -0)) then v618,v619=pcall(function() return v528.Transparency;end);print(("Text.Transparency reads back: %s  (expect 1 = opaque)"):format((v618 and tostring(v619)) or "unsupported" ));v615=2 + 0 ;end end end local function v529(v596) if  not v596 then return "nil";end local v597,v598=pcall(function() return v596.ZIndex;end);return (v597 and tostring(v598)) or "unsupported" ;end print(("layering        : squares %s..%s   texts %s..%s"):format(v529(v97[1]),v529(v97[ #v97]),v529(v98[1 + 0 ]),v529(v98[ #v98])));print(("panel           : %d,%d  %dx%d   theme=%d  opacity=%.2f"):format(v82,v83,v84,v85,v5.cfg.theme or (723 -(478 + 244)) ,v5.cfg.ui_opacity or (518 -(440 + 77)) ));print("-----------------------------");return {zindex=v99,font=v95,squares= #v97,texts= #v98};end;v5.themes=function() local v530={};for v599,v600 in ipairs(v90) do v530[v599]=v600.name;end return v530;end;v5.setTheme=function(v531) local v532=0 + 0 ;while true do if (v532==1) then v5.cfg.theme=v531;v92(v531);v532=7 -5 ;end if (0==v532) then if (type(v531)=="string") then for v852,v853 in ipairs(v90) do if (v853.name:lower()==v531:lower()) then v531=v852;break;end end end if  not v90[v531] then return nil;end v532=1;end if (v532==(1558 -(655 + 901))) then return v90[v531].name;end end end;notify("Violence District Hub","Loaded. No calibration needed.",1 + 3 );print("[vdHub] loaded -- stop with _G.vdHub.stop()");
+--======================================================================
+--  STATE / CONFIG
+--======================================================================
+local state = {
+    running = true,
+    version = "2026-10-24.2",
+    tab     = "pallet",
+    cfg = {
+        -- auto pallet
+        p_enabled        = false,
+        interactionRadius= 4,           -- game's DETECTION_RADIUS is 4 (from a PalletPoint)
+        stunReach        = 5,           -- studs added to the board's thin (facing) axis = drop depth
+        stunWidth        = 3,           -- studs added to the board's width axis
+        stunHeight       = 4,           -- studs added to the board's tall axis
+        cooldown         = 0.55,        -- MUST exceed the game's SPACE_COOLDOWN (0.5) or presses are eaten
+        hz               = 90,
+        p_dropKey        = 32,          -- Space. The game's pallet drop is isActionInput = Space.
+                                        -- (R is isDropInput = put-down-gift, NOT pallets.)
+        -- auto skillcheck
+        sc_enabled       = false,
+        sc_lead          = 2,           -- degrees before the centre of the success window
+        sc_key           = 32,          -- fallback VK; kb_skillcheck follows the game's setting
+
+        -- fast vault: current SurvivorVault movement-history rules
+        fv_enabled       = false,      -- any approach angle while sprinting
+
+        -- veil spear aimbot
+        --   The throw is fully client-directed. Animations.lua line 308:
+        --     Remotes.Killers.Veil.Spearthrow:FireServer(
+        --         camera.CFrame.LookVector, speed, camera.CFrame.Position)
+        --   So whatever the camera looks at on release IS the throw direction.
+        --   Nothing is spoofed -- the spear really flies and the server's own
+        --   hit detection resolves it normally. Same class as fast vault:
+        --   perfect execution of a legitimate client input.
+        --
+        --   SPEED is a pure function of hold time (Animations.lua 285-297):
+        --     hold >= 2s and not on cooldown -> 165, then a 30s move cooldown
+        --     hold >= 1s                     -> 142.5
+        --     otherwise                      -> hold * 150
+        --     hold >= 7s                     -> auto-release
+        --   We mirror that formula and the 30s cooldown, so while you are still
+        --   charging the lead is solved against the speed the spear will
+        --   ACTUALLY leave at -- the aim re-converges as the tier changes.
+        --
+        --   FLIGHT is semi-implicit Euler on Heartbeat (ProjectileHandler 36-45):
+        --     v += (0, -g*dt*GMult, 0);   p += v*dt
+        --   That drops MORE than a true parabola. After n steps the discrete
+        --   drop is g*dt^2*n(n+1)/2 against the analytic g*t^2/2, so the excess
+        --   is exactly 0.5*g*dt*t (~0.5 studs at t=0.3s -- a miss at range).
+        --   So we solve the closed form against g' = g*(1 + dt/t), iterated,
+        --   which lands ON the integrator's real trajectory rather than near it.
+        --   Base g is read from memory (workspace+0x9C8 = 196.200; the .Gravity
+        --   binding reads nil in Matcha). GMult is server-supplied per throw and
+        --   never visible to us, so it is MEASURED off your real arcs: every
+        --   flight is least-squares fitted for vertical accel and folded back
+        --   into va_gmult.
+        va_enabled       = false,
+        va_fov           = 55,          -- max degrees off your crosshair to consider a target
+        va_range         = 260,         -- studs
+        va_smooth        = 1,           -- 1 = snap. Values ABOVE 1 are a real TIME
+                                        -- CONSTANT, not a per-frame fraction:
+                                        -- alpha = 1 - exp(-dt/tau), tau = (n-1)*0.015s.
+                                        -- The old per-frame lerp converged inside ~60ms
+                                        -- at loop rate however small it was set, which
+                                        -- is exactly why it never looked like smoothing.
+        va_sticky        = true,        -- once locked, hold that target while it stays
+                                        -- alive / in range / solvable, instead of
+                                        -- re-picking the nearest every single frame
+        va_gmult         = 0.5,         -- gravity multiplier. MEASURED, not assumed: four
+                                        -- real arcs fitted to 0.533 then 0.513, i.e. the
+                                        -- spear falls at HALF workspace gravity (~98.1
+                                        -- studs/s^2). Shipping the naive GMult=1 would have
+                                        -- aimed for twice the true drop and sent every long
+                                        -- throw high. Auto-cal keeps refining this live.
+        va_autocal       = true,        -- fold each measured arc back into va_gmult
+        va_los           = true,        -- require an unobstructed line to the target
+        va_lead          = true,        -- solve the intercept against target velocity
+        va_euler         = true,        -- correct for the discrete integrator's extra drop
+        va_holdOnly      = true,        -- only steer while you are charging a throw.
+                                        -- The charge is a HOLD binding resolved inside
+                                        -- KillerActionController; MouseButton1 is the
+                                        -- assumption. If your bind differs, turn this
+                                        -- off and it steers whenever spearmode is on.
+        va_aimHeight     = 0,           -- studs above the target's root to aim at
+        va_originCam     = false,       -- launch origin: false = HRP+look*3+(0,1.5,0)
+                                        -- (what ProjectileHandler uses), true = camera pos
+                                        -- (what FireServer transmits). Unknown which the
+                                        -- SERVER uses, so it is a switch, not a guess.
+
+        -- ui
+        theme            = 1,
+        ui_opacity       = 1,
+        ui_round         = 6,
+    },
+}
+_G.vdHub = state
+local uiCapture = false          -- shared by the input drivers and Drawing panel
+
+--======================================================================
+--  MEMORY HELPERS  (no calibration path anywhere)
+--======================================================================
+local MEM_BASE = (type(getbase)=="function") and select(2, pcall(getbase)) or nil
+
+-- Real "Unsafe LuaU" detector: read the module's PE header. First byte
+-- of a valid PE image is 'M' (77). Reads silently fail when unsafe is off.
+local _memOk, _memChk = false, -1
+local function unsafeOn()
+    local now = tick()
+    if now - _memChk > 1 then
+        _memChk = now
+        if MEM_BASE then
+            local ok, b = pcall(memory_read, "byte", MEM_BASE)
+            _memOk = ok and b == 77
+        else
+            _memOk = false
+        end
+    end
+    return _memOk
+end
+
+local function rdf(a)
+    local ok, v = pcall(memory_read, "float", a)
+    if ok and type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
+        return v
+    end
+end
+
+--======================================================================
+--  AUTO PALLET  (presses SPACE when a killer is in the board's stun zone)
+--  Verified against SurvivorController.v_u_97 (the isActionInput handler):
+--    priority is vault -> palletSlide -> palletDrop, and it bails early on
+--    Health <= 50, a "doing action" tag, or the 0.5s SPACE_COOLDOWN.
+--  So we gate the press the same way:
+--   1. Health > 50
+--   2. within interactionRadius of a PalletPoint (game's DETECTION_RADIUS 4)
+--   3. a killer inside the PrimaryPartPallet board's stun box
+--   4. per-pallet cooldown > the game's 0.5s space cooldown
+--======================================================================
+local pallets      = {}
+local blockers     = {}          -- VaultPoint / PalletPointSlide: they steal the Space press
+local vaults       = {}          -- VaultTrigger parts: {x,y,z,flatLookX,flatLookZ}
+local killerRoots  = {}
+local lastDrop     = {}          -- per-pallet id -> tick of last R press
+local pStat        = { elig = false, inZone = false, hp = true, nearD = nil, killD = nil }
+
+local function myRoot()
+    local ch = lp.Character
+    return ch and ch:FindFirstChild("HumanoidRootPart")
+end
+
+-- the game refuses the drop below 50 HP, so don't waste presses
+local function healthOk()
+    local ch = lp.Character
+    local hum = ch and ch:FindFirstChild("Humanoid")
+    if not hum then return true end
+    local h = hum.Health
+    return (type(h) ~= "number") or h > 50
+end
+
+-- already mid-drop? the game sets this attribute on its own LocalScript
+local function busy()
+    local ch = lp.Character
+    local sc = ch and ch:FindFirstChild("CheckInterractable")
+    if not sc then return false end
+    local ok, v = pcall(function() return sc:GetAttribute("isDroppingPallet") end)
+    return ok and v == true
+end
+
+-- would this Space press get eaten by a vault / slide instead?
+-- takes raw components + reads cached number triples: no property reads in here,
+-- this runs inside the hot loop.
+local function blockedNearby(mx, my, mz, r)
+    local r2 = r * r
+    for _, b in ipairs(blockers) do
+        local dx, dy, dz = mx-b[1], my-b[2], mz-b[3]
+        if (dx*dx + dy*dy + dz*dz) <= r2 then return true end
+    end
+    return false
+end
+
+-- Structure-agnostic pallet discovery.
+-- Map layouts differ between rounds: on some, a pallet is a Model directly
+-- under Map; on others it is Map > Model > Palletwrong(MeshPart) > parts, and
+-- the container's own Size/CFrame are not readable. The ONE constant is a Part
+-- named "PalletPoint" (what the game itself tags and scans for), so we anchor
+-- on those and group them by their parent container.
+-- NOTE: there is also a StringValue named "PalletPoint" nested inside the real
+-- Part, hence the explicit ClassName == "Part" filter.
+local function refreshPallets()
+    local out, byParent, blocks, vaultPts = {}, {}, {}, {}
+    local map = Workspace:FindFirstChild("Map")
+    if not map then pallets = {} blockers = {} vaults = {} return end
+    for _, d in ipairs(map:GetDescendants()) do
+        local nm = d.Name
+        if nm == "PalletPoint" and d.ClassName == "Part" then
+            local par = d.Parent
+            if par then
+                local key = par.Address
+                local e = byParent[key]
+                if not e then
+                    -- the physical board defines the stun zone; fall back to the
+                    -- point itself if this layout has no PrimaryPartPallet
+                    local board = par:FindFirstChild("PrimaryPartPallet")
+                    if not board or not board.Size then board = d end
+                    e = { board = board, pts = {}, id = board.Address }
+                    byParent[key] = e
+                    out[#out+1] = e
+                end
+                -- cache the point position as raw numbers: these never move
+                -- mid-round, so the driver does pure arithmetic instead of a
+                -- VM property read per point per frame.
+                local p = d.Position
+                if p then e.pts[#e.pts+1] = { p.X, p.Y, p.Z } end
+            end
+        elseif nm == "VaultPoint" or nm == "PalletPointSlide" then
+            -- Space is shared: the game checks vault -> slide -> drop, so if one
+            -- of these is in range the press vaults/slides INSTEAD of dropping.
+            --
+            -- These names are usually StringValue MARKERS, not geometry -- the
+            -- real Part is the parent (e.g. VaultPoint lives inside VaultTrigger).
+            -- Take the marker's own Position if it has one, else the parent's.
+            -- Matching only on the name found nothing on maps that use
+            -- VaultTrigger, which silently disabled this suppression entirely.
+            local p = d.Position
+            if not p then
+                local par = d.Parent
+                p = par and par.Position or nil
+            end
+            if p then
+                blocks[#blocks+1] = { p.X, p.Y, p.Z }
+            end
+        end
+        -- Fast vault needs the VaultTrigger PART, not the VaultPoint marker:
+        -- the angle test is measured against the trigger's own CFrame. Cache
+        -- its position and flat (horizontal) look vector as raw numbers --
+        -- triggers never move mid-round, so the driver does no property reads.
+        -- Each window has two antiparallel triggers, one per side; the bowtie
+        -- means aligning to either one satisfies the test for both, so we do
+        -- not need to know which side the server picked.
+        if nm == "VaultTrigger" and d.ClassName == "Part" then
+            local cf = d.CFrame
+            if cf then
+                local lv = cf.LookVector
+                local fx, fz = lv.X, lv.Z
+                local mag = math.sqrt(fx*fx + fz*fz)
+                if mag > 1e-4 then
+                    local pp = cf.Position
+                    vaultPts[#vaultPts+1] = { pp.X, pp.Y, pp.Z, fx/mag, fz/mag }
+                end
+            end
+        end
+    end
+    pallets = out
+    blockers = blocks
+    vaults   = vaultPts
+    -- precompute each board's half-extents and which margin applies per axis
+    for _, e in ipairs(out) do
+        local ok, s = pcall(function() return e.board.Size end)
+        if ok and s then
+            local n = { s.X, s.Y, s.Z }
+            local order = { 1, 2, 3 }
+            table.sort(order, function(i, j) return n[i] < n[j] end)
+            -- slot[axis] = 1 reach (thinnest) | 2 width (middle) | 3 height (largest)
+            local slot = {}
+            slot[order[1]], slot[order[2]], slot[order[3]] = 1, 2, 3
+            e.ax = { n[1]*0.5, n[2]*0.5, n[3]*0.5, slot[1], slot[2], slot[3] }
+        end
+    end
+end
+
+-- Players:GetPlayers() is not always resolvable on this VM (the binding can go
+-- missing on a stale service handle across rounds/respawns). Re-resolve the
+-- service each call and fall back to GetChildren(), which returns the same
+-- Player objects.
+local function getPlayers()
+    local svc = Players
+    local ok, s = pcall(game.GetService, game, "Players")
+    if ok and s then svc = s end
+    if not svc then return {} end
+
+    local ok2, list = pcall(function() return svc:GetPlayers() end)
+    if ok2 and type(list) == "table" and #list > 0 then return list end
+
+    local ok3, kids = pcall(function() return svc:GetChildren() end)
+    if not ok3 or type(kids) ~= "table" then return {} end
+    local out = {}
+    for _, p in ipairs(kids) do
+        if p.ClassName == "Player" then out[#out+1] = p end
+    end
+    return out
+end
+
+-- Am I actually playing right now? Between rounds (and while dead) the game
+-- parks you on the Spectator team far from the map, which is why the HUD used
+-- to report a pallet 7570 studs away and a permanent killer -- both readings
+-- were true, just meaningless. Gate the status readouts on this.
+local function roundLive()
+    local ok, t = pcall(function() return lp.Team end)
+    if not ok or not t then return false end
+    local n = string.lower(tostring(t.Name or ""))
+    if n:find("spectator") or n:find("lobby") then return false end
+    return true
+end
+
+local function refreshKiller()
+    local killers, others = {}, {}
+    -- instance handles do NOT compare equal on this VM, so identify self by
+    -- UserId/Name rather than `plr ~= lp`
+    local myId, myName = nil, nil
+    pcall(function() myId = lp.UserId end)
+    pcall(function() myName = lp.Name end)
+    for _, plr in ipairs(getPlayers()) do
+        local isSelf = (myId and plr.UserId == myId) or (myName and plr.Name == myName)
+        if not isSelf then
+            local ch = plr.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if root then
+                local tn = plr.Team and string.lower(tostring(plr.Team.Name or "")) or ""
+                if tn:find("killer") or tn:find("jason") or tn:find("hunter") then
+                    killers[#killers+1] = root
+                else
+                    others[#others+1] = root
+                end
+            end
+        end
+    end
+    -- Prefer team-identified killers. The fallback to `others` exists for maps
+    -- or modes where the Killer team isn't set yet -- but it must NOT fire when
+    -- there simply is no opponent: pre-round (everyone Spectator, or a solo
+    -- server) `others` is full of untagged non-killers, which made the HUD read
+    -- "Killer: YES" permanently. Only fall back once a round is actually live.
+    if #killers > 0 then
+        killerRoots = killers
+    elseif roundLive() then
+        killerRoots = others
+    else
+        killerRoots = {}
+    end
+
+    -- killer distance is a STATUS READOUT only, never a trigger input, so it is
+    -- computed here at 2Hz instead of in the driver. Each .Position read costs
+    -- ~0.08ms on this VM -- far too expensive to do 90x a second for a label.
+    local me = myRoot()
+    local mp = me and me.Position
+    if not mp then pStat.killD = nil return end
+    local best = nil
+    for i = 1, #killerRoots do
+        local kp = killerRoots[i].Position
+        if kp then
+            local dx, dy, dz = mp.X-kp.X, mp.Y-kp.Y, mp.Z-kp.Z
+            local d2 = dx*dx + dy*dy + dz*dz
+            if not best or d2 < best then best = d2 end
+        end
+    end
+    pStat.killD = best and math.sqrt(best) or nil
+    if pStat.killD and pStat.killD > 200 then pStat.killD = nil end
+end
+
+-- collectors (slow)
+-- NOTE: there is deliberately NO periodic pallet rescan. Pallets do not move
+-- mid-round, so the ~120ms Map:GetDescendants() runs ONCE per round, driven by
+-- the round watcher below. Re-scanning on a timer was pure overhead.
+
+-- ROUND WATCHER
+-- Map's contents are wiped and repopulated on every round start (the Folder
+-- itself may or may not be reused). Holding pallets from the previous round
+-- means reading destroyed instances, so drop the list the moment the map
+-- clears and rebuild it as soon as the new one is in.
+-- Cheap by design: FindFirstChild + one child-count read, nothing recursive.
+task.spawn(function()
+    local lastAddr, lastCount = nil, -1
+    local armed = false          -- true once we've seen the map go empty/new
+    while state.running do
+        local map   = Workspace:FindFirstChild("Map")
+        local addr  = map and map.Address or nil
+        local count = map and #map:GetChildren() or 0
+
+        if count == 0 then
+            -- between rounds: nothing valid to act on
+            if #pallets > 0 or #blockers > 0 then
+                pallets, blockers, vaults, lastDrop = {}, {}, {}, {}
+            end
+            armed = true
+        elseif addr ~= lastAddr or lastCount <= 0 or armed then
+            -- new map instance, or the old one just repopulated -> round start
+            pallets, blockers, vaults, lastDrop = {}, {}, {}, {}
+            task.wait(1)               -- let the map finish streaming in
+            pcall(refreshPallets)
+            armed = false
+        end
+
+        lastAddr, lastCount = addr, count
+        task.wait(1)
+    end
+end)
+task.spawn(function()
+    while state.running do
+        pcall(refreshKiller)   -- never let one bad frame kill the collector
+        task.wait(0.5)
+    end
+end)
+
+-- Is a world position inside the pallet board's stun zone?
+-- We transform the point into the board's own space and test it against the
+-- board's half-extents plus per-axis margins. The board is a thin tall wall:
+--   thinnest Size axis  = facing  (the direction the board sweeps when dropped)
+--   largest  Size axis  = height  (vertical)
+--   remaining axis      = width   (along the board)
+-- Using the board's real Size + CFrame makes this correct at any orientation,
+-- so "in stun range" tracks the physical board, not the survivor's position.
+-- The axis classification is computed ONCE per pallet at scan time (pal.ax),
+-- so the hot path is just a transform plus three compares.
+local function inStunZone(pal, worldPos, m)
+    local ax = pal.ax
+    if not ax then return false end
+    local ok, rel = pcall(function() return pal.board.CFrame:PointToObjectSpace(worldPos) end)
+    if not ok or not rel then return false end
+    if math.abs(rel.X) > ax[1] + m[ax[4]] then return false end
+    if math.abs(rel.Y) > ax[2] + m[ax[5]] then return false end
+    if math.abs(rel.Z) > ax[3] + m[ax[6]] then return false end
+    return true
+end
+
+-- reused every frame so the hot loop never allocates. [1]=reach [2]=width [3]=height,
+-- matching the slot indices baked into pal.ax by refreshPallets().
+local marginBuf = { 0, 0, 0 }
+local atBuf     = {}   -- pallets I'm standing at this frame (pass 1 -> pass 2)
+local kposBuf   = {}   -- killer positions, read only when pass 1 found something
+
+-- driver (fast)
+task.spawn(function()
+    while state.running do
+        local c = state.cfg
+        local elig, zone = false, false
+        local nearD = nil
+        if c.p_enabled then
+            local root = myRoot()
+            local hpOk = healthOk()
+            if root and hpOk then
+                local myp = root.Position
+                local mx, my, mz = myp.X, myp.Y, myp.Z
+                local now = tick()
+                local ir2 = c.interactionRadius * c.interactionRadius
+                marginBuf[1] = c.stunReach
+                marginBuf[2] = c.stunWidth
+                marginBuf[3] = c.stunHeight
+
+                -- PASS 1 (cheap): pure arithmetic on cached numbers, zero VM
+                -- property reads. Finds which pallets I'm actually standing at.
+                -- Almost every frame this finds none and we stop right here.
+                local atCount = 0
+                for i = 1, #pallets do
+                    local pal = pallets[i]
+                    local pts = pal.pts
+                    local near = false
+                    for j = 1, #pts do
+                        local pp = pts[j]
+                        local dx, dy, dz = mx-pp[1], my-pp[2], mz-pp[3]
+                        local d2 = dx*dx + dy*dy + dz*dz
+                        if not nearD or d2 < nearD then nearD = d2 end
+                        if d2 <= ir2 then near = true end
+                    end
+                    if near then
+                        atCount = atCount + 1
+                        atBuf[atCount] = pal
+                    end
+                end
+
+                -- PASS 2 (expensive): only now do we touch the VM. Killer
+                -- .Position reads cost ~0.08ms EACH, so they are gated behind
+                -- pass 1 -- no point tracking the killer from 6000 studs away.
+                if atCount > 0 then
+                    elig = true
+                    local kn = 0
+                    for i = 1, #killerRoots do
+                        local kp = killerRoots[i].Position
+                        if kp then
+                            kn = kn + 1
+                            kposBuf[kn] = kp
+                        end
+                    end
+                    for i = 1, atCount do
+                        local pal = atBuf[i]
+                        for j = 1, kn do
+                            if inStunZone(pal, kposBuf[j], marginBuf) then
+                                zone = true
+                                if (now - (lastDrop[pal.id] or 0)) >= c.cooldown
+                                   and not busy()
+                                   and not blockedNearby(mx, my, mz, c.interactionRadius) then
+                                    keypress(c.p_dropKey); task.wait(0.02); keyrelease(c.p_dropKey)
+                                    lastDrop[pal.id] = tick()
+                                end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+            pStat.hp = hpOk
+        end
+        pStat.elig, pStat.inZone = elig, zone
+        -- A pallet thousands of studs away is not "the nearest pallet", it's
+        -- noise from the lobby/spectator spawn. Report a distance only when it
+        -- could plausibly matter this round.
+        local nd = nearD and math.sqrt(nearD) or nil
+        pStat.nearD = (nd and nd <= 200) and nd or nil
+        task.wait(1 / state.cfg.hz)
+    end
+end)
+
+--======================================================================
+--  AUTO SKILLCHECK
+--  The grader still uses Goal+102 .. Goal+116. GUI Rotation moved from
+--  +0xE8 to +0xD8 in the current build; +0xE8 is now the screen centre Y.
+--  Resolve the rotation/sin/cos/geometry layout together, never a bare float.
+--======================================================================
+local scHits, scChecks = 0, 0
+local scLast = { l = nil, g = nil, win = nil }
+local scStat = { status = "Disabled", key = "Space", misses = 0, errors = 0 }
+local scGui = { refreshAt = 0, resolveAt = 0 }
+local scTrack = {}
+local scHeld, scInput, scInputAt, scWasEnabled = nil, nil, 0, false
+
+local function scFinite(v)
+    return type(v) == "number" and v == v and math.abs(v) < 1000000
+end
+
+local function scRotationSignature(inst, off, ap)
+    if not inst or not ap or not scFinite(ap.X) or not scFinite(ap.Y) then return false end
+    local a = inst.Address + off
+    -- AbsoluteSize's binding is stale in this build too. Check the actual
+    -- geometry against AbsolutePosition, then its centre and rotation cache.
+    local x, y, w, h = rdf(a + 0x24), rdf(a + 0x28), rdf(a + 0x2C), rdf(a + 0x30)
+    if not x or not y or not w or not h or w <= 0 or h <= 0 or w > 16384 or h > 16384 then return false end
+    if math.abs(x - ap.X) > 0.75 or math.abs(y - ap.Y) > 0.75 then return false end
+    local cx, cy = rdf(a + 0x0C), rdf(a + 0x10)
+    if not cx or not cy or math.abs(cx - x - w * 0.5) > 1 or math.abs(cy - y - h * 0.5) > 1 then return false end
+    local angle, sn, cs = rdf(a), rdf(a + 4), rdf(a + 8)
+    if not scFinite(angle) or not sn or not cs then return false end
+    local rad = math.rad(angle % 360)
+    return math.abs(sn - math.sin(rad)) < 0.035 and math.abs(cs - math.cos(rad)) < 0.035
+end
+
+local function resolveSkillOffset(line, goal)
+    local lap, gap = line.AbsolutePosition, goal.AbsolutePosition
+    local function matches(off)
+        return scRotationSignature(line, off, lap) and scRotationSignature(goal, off, gap)
+    end
+    for _, off in ipairs({ 0xD8, 0xE8 }) do
+        if matches(off) then return off end
+    end
+    for off = 0x80, 0x240, 4 do
+        if off ~= 0xD8 and off ~= 0xE8 and matches(off) then return off end
+    end
+end
+
+local function readSkillRots(line, goal, off)
+    if not off then return nil end
+    local lr, gr = rdf(line.Address + off), rdf(goal.Address + off)
+    if not scFinite(lr) or not scFinite(gr) or lr < -3600 or gr < -3600 then return nil end
+    return lr, gr
+end
+
+-- Separate sampling from input so a reset, chained goal, or held physical key
+-- cannot produce repeated presses. A stationary/hidden needle never arms.
+local function scAdvance(t, lr, gr, now, lead)
+    local previous = t.line
+    local reset = t.goal == nil or math.abs(gr - t.goal) > 0.5
+        or (previous ~= nil and lr < previous - 2)
+    if reset then
+        t.fired, t.counted, t.missed = false, false, false
+        t.motionAt, t.motionLine, t.rate = nil, nil, nil
+    end
+    local moved = previous ~= nil and lr > previous + 0.001
+    if moved then
+        if t.motionAt then
+            local dt = now - t.motionAt
+            if dt > 0 and dt < 0.5 then
+                local rate = (lr - t.motionLine) / dt
+                if rate > 0 and rate < 10000 then
+                    t.rate = t.rate and (t.rate * 0.5 + rate * 0.5) or rate
+                end
+            end
+        end
+        t.motionAt, t.motionLine = now, lr
+    end
+    t.line, t.goal = lr, gr
+    local active = lr > 0.05 and t.motionAt ~= nil and now - t.motionAt <= 0.12
+    local newCheck = active and not t.counted
+    if newCheck then t.counted = true end
+    local lo, hi = gr + 102, gr + 116
+    local threshold = math.clamp(gr + 109 - math.clamp(lead or 0, 0, 10)
+        - (t.rate or 0) / 120, lo + 0.25, hi - 0.25)
+    local missed = active and not t.fired and not t.missed and lr > hi
+    if missed then t.missed = true end
+    return active and not t.fired and lr >= threshold and lr <= hi, newCheck, missed, lo, hi
+end
+
+local SC_KEYS = {
+    Space=32, Tab=9, Return=13, Enter=13, Escape=27, Backspace=8,
+    Insert=45, Delete=46, Home=36, End=35, PageUp=33, PageDown=34,
+    Left=37, Up=38, Right=39, Down=40, CapsLock=20,
+    LeftShift=160, RightShift=161, LeftControl=162, RightControl=163,
+    LeftAlt=164, RightAlt=165, Minus=189, Equals=187, LeftBracket=219,
+    RightBracket=221, BackSlash=220, Semicolon=186, Quote=222,
+    Comma=188, Period=190, Slash=191, Backquote=192,
+    KeypadZero=96, KeypadOne=97, KeypadTwo=98, KeypadThree=99,
+    KeypadFour=100, KeypadFive=101, KeypadSix=102, KeypadSeven=103,
+    KeypadEight=104, KeypadNine=105, KeypadMultiply=106, KeypadPlus=107,
+    KeypadMinus=109, KeypadPeriod=110, KeypadDivide=111, KeypadEnter=13,
+}
+local function scInputFor(name, fallback)
+    if type(name) ~= "string" or name == "" then
+        local code = tonumber(fallback) or 32
+        return { code = code, name = code == 32 and "Space" or ("VK " .. tostring(code)) }
+    end
+    if name == "MouseButton1" or name == "MouseButton2" then
+        return { mouse = name == "MouseButton1" and 1 or 2, name = name }
+    end
+    local code = SC_KEYS[name]
+    if not code and #name == 1 and name:match("[%w]") then code = string.byte(name:upper()) end
+    local f = tonumber(name:match("^F(%d+)$"))
+    if not code and f and f >= 1 and f <= 24 then code = 111 + f end
+    return code and { code = code, name = name } or nil
+end
+
+local function scReleaseInput()
+    local held = scHeld
+    scHeld = nil
+    if not held then return end
+    if held.mouse == 1 then pcall(mouse1release)
+    elseif held.mouse == 2 then pcall(mouse2release)
+    else pcall(keyrelease, held.code) end
+end
+
+local function scInputDown(input)
+    if input.mouse == 1 then return ismouse1pressed() end
+    if input.mouse == 2 then return ismouse2pressed() end
+    return iskeypressed(input.code)
+end
+
+local function scPress(input)
+    scHeld = input
+    local ok, err
+    if input.mouse == 1 then ok, err = pcall(mouse1press)
+    elseif input.mouse == 2 then ok, err = pcall(mouse2press)
+    else ok, err = pcall(keypress, input.code) end
+    if ok then task.wait(0.025) end
+    scReleaseInput()
+    return ok, err
+end
+
+local function scRefreshGui(now)
+    if now >= scGui.refreshAt then
+        scGui.refreshAt = now + 0.25
+        local pg = lp:FindFirstChild("PlayerGui")
+        local gui = pg and pg:FindFirstChild("SkillCheckPromptGui")
+        local check = gui and gui:FindFirstChild("Check")
+        local line = check and check:FindFirstChild("Line")
+        local goal = check and check:FindFirstChild("Goal")
+        local lid, gid = line and line.Address, goal and goal.Address
+        if lid ~= scGui.lid or gid ~= scGui.gid then
+            scGui.off, scGui.resolveAt = nil, 0
+            scTrack = {}
+            scStat.offset = nil
+        end
+        scGui.line, scGui.goal, scGui.lid, scGui.gid = line, goal, lid, gid
+    end
+    if scGui.line and scGui.goal and not scGui.off and now >= scGui.resolveAt then
+        scGui.resolveAt = now + 0.5
+        scGui.off = resolveSkillOffset(scGui.line, scGui.goal)
+        scStat.offset = scGui.off
+    end
+end
+
+local function scStep()
+    local c = state.cfg
+    if not c.sc_enabled or not unsafeOn() then
+        scWasEnabled = false
+        scStat.status = c.sc_enabled and "Enable Unsafe LuaU" or "Disabled"
+        scReleaseInput()
+        return
+    end
+    if not scWasEnabled then
+        scWasEnabled = true
+        scTrack = {}
+        scGui.refreshAt, scInputAt = 0, 0
+    end
+    if uiCapture or (type(isrbxactive) == "function" and not isrbxactive()) then
+        scTrack = {}
+        scStat.status = "Waiting for game focus"
+        return
+    end
+    local now = os.clock()
+    scRefreshGui(now)
+    if now >= scInputAt then
+        scInputAt = now + 0.5
+        local name = lp:GetAttribute("kb_skillcheck")
+        scInput = scInputFor(name, c.sc_key)
+        scStat.key = scInput and scInput.name or tostring(name)
+    end
+    if not scGui.line or not scGui.goal then
+        scStat.status = "Waiting for prompt"
+        return
+    end
+    if not scGui.off then
+        scStat.status = "Resolving GUI layout"
+        return
+    end
+    local lr, gr = readSkillRots(scGui.line, scGui.goal, scGui.off)
+    if not lr then
+        scGui.off, scStat.offset, scTrack = nil, nil, {}
+        scStat.status = "Refreshing GUI layout"
+        return
+    end
+    local fire, newCheck, missed, lo, hi = scAdvance(scTrack, lr, gr, now, c.sc_lead)
+    scLast.l, scLast.g = lr, gr
+    scLast.win = string.format("%.0f..%.0f", lo, hi)
+    if newCheck then scChecks = scChecks + 1 end
+    if missed then scStat.misses = scStat.misses + 1 end
+    if fire then
+        if not scInput then
+            scStat.status = "Unsupported skillcheck bind"
+        elseif scInputDown(scInput) then
+            scStat.status = "Release " .. scInput.name
+        else
+            scTrack.fired = true
+            local ok, err = scPress(scInput)
+            if ok then
+                scHits = scHits + 1
+                scStat.status, scStat.error = "Pressed " .. scInput.name, nil
+            else
+                scTrack.fired = false
+                error(err)
+            end
+        end
+    elseif scTrack.fired then scStat.status = "Input sent"
+    elseif scTrack.missed then scStat.status = "Window passed"
+    elseif scTrack.motionAt and now - scTrack.motionAt <= 0.12 then scStat.status = "Following needle"
+    else scStat.status = "Waiting for check" end
+end
+
+task.spawn(function()
+    while state.running do
+        local ok, err = pcall(scStep)
+        if not ok then
+            scReleaseInput()
+            scTrack = {}
+            scStat.error, scStat.status = tostring(err), "Retrying after read error"
+            scStat.errors = scStat.errors + 1
+        end
+        task.wait(not ok and 0.1 or (state.cfg.sc_enabled and 1 / 240 or 0.1))
+    end
+    scReleaseInput()
+end)
+
+--======================================================================
+--  ALWAYS FAST VAULT
+--  The current controller calls SurvivorVault.evaluate on recent movement
+--  samples, then sends its chosen tier with the normal vault request. Its old
+--  40-degree yaw test is no longer the decision point.
+--
+--  Resolve ONLY that module's five-field signature once and cache its slots.
+--  Relax the approach distance/pace/direction rules while enabled. Sprinting,
+--  grounding, movement locks and the game's allowed-speed gate still apply.
+--  No per-frame rotation or velocity writes are needed.
+--======================================================================
+local FV_ORIGINAL = {
+    DISTANCE = 3, REPEAT_DISTANCE = 3.5, DOT = 0.7071067811865476,
+    MIN_SPEED = 12.5, ARRIVE_GRACE = 0.12,
+}
+-- A vault can sample zero displacement immediately before its windup.
+-- A negative pace threshold accepts that sample and keeps the sampler's
+-- distance / MIN_SPEED history calculation finite (zero would make 0/0).
+local FV_PATCH = { DISTANCE = 0, REPEAT_DISTANCE = 0, DOT = -1, MIN_SPEED = -1 }
+local FV_KEYS = { "DISTANCE", "REPEAT_DISTANCE", "DOT", "MIN_SPEED" }
+local fvStat = { status = "Disabled", ready = false, holding = false, vaults = 0, fast = 0, scans = 0 }
+local fvCache, fvResolving, fvAttemptedFor = nil, false, nil
+local fvFault = nil
+local fvCharId, fvLastCount = nil, nil
+
+local function fvSame(a, b)
+    return scFinite(a) and type(b) == "number" and math.abs(a - b) <= math.max(1, math.abs(b)) * 0.000001
+end
+
+local function fvRead(cache, key)
+    local row = cache and cache.byKey[key]
+    if not row then return nil end
+    local ok, v = pcall(memory_read, "double", row.addr)
+    return ok and scFinite(v) and v or nil
+end
+
+local function fvBuildCache(rows)
+    if type(rows) ~= "table" or #rows ~= 5 then return nil, "Vault module not uniquely resolved" end
+    local cache = { rows = rows, byKey = {}, originals = {}, written = {}, job = game.JobId }
+    for _, row in ipairs(rows) do
+        if type(row) ~= "table" or row.type ~= "number" or type(row.addr) ~= "number"
+            or not FV_ORIGINAL[row.key] or cache.byKey[row.key] then
+            return nil, "Unexpected vault table layout"
+        end
+        cache.byKey[row.key] = row
+        local value = fvRead(cache, row.key)
+        if not fvSame(value, FV_ORIGINAL[row.key]) then return nil, "Vault rules differ from this build" end
+        cache.originals[row.key] = value
+    end
+    for key in pairs(FV_ORIGINAL) do
+        if not cache.byKey[key] then return nil, "Incomplete vault table" end
+    end
+    return cache
+end
+
+local function fvSetKey(cache, key, value)
+    local ok, changed = pcall(applygc, cache.rows, key, value)
+    local verified = fvSame(fvRead(cache, key), value)
+    if verified then cache.written[key] = not fvSame(value, cache.originals[key]) end
+    return ok and changed == 1 and verified
+end
+
+local function fvHasWrites()
+    if fvCache then
+        for _, key in ipairs(FV_KEYS) do if fvCache.written[key] then return true end end
+    end
+    return false
+end
+
+local function fvRestore()
+    if not fvHasWrites() then fvStat.holding = false return true end
+    if fvCache.job ~= game.JobId then
+        -- The old DataModel is gone. Never write its addresses into a new game.
+        fvCache, state._vaultCache = nil, nil
+        fvStat.holding, fvStat.ready = false, false
+        return true
+    end
+    if not unsafeOn() or not fvSame(fvRead(fvCache, "ARRIVE_GRACE"), fvCache.originals.ARRIVE_GRACE) then
+        return false
+    end
+    local restored = true
+    for _, key in ipairs(FV_KEYS) do
+        if fvCache.written[key] then
+            local current = fvRead(fvCache, key)
+            if fvSame(current, FV_PATCH[key]) then
+                if not fvSetKey(fvCache, key, fvCache.originals[key]) then restored = false end
+            elseif scFinite(current) then
+                -- The game or another script already replaced our value.
+                fvCache.written[key] = false
+            else
+                restored = false
+            end
+        end
+    end
+    fvStat.holding = fvHasWrites()
+    return restored and not fvStat.holding
+end
+
+local function fvApply()
+    if not fvCache or fvCache.job ~= game.JobId then return false, "Rejoin detected; reload the hub" end
+    if not fvSame(fvRead(fvCache, "ARRIVE_GRACE"), fvCache.originals.ARRIVE_GRACE) then
+        return false, "Vault cache needs refreshing"
+    end
+    for _, key in ipairs(FV_KEYS) do
+        local value = fvRead(fvCache, key)
+        if not fvSame(value, fvCache.originals[key])
+            and not (fvCache.written[key] and fvSame(value, FV_PATCH[key])) then
+            return false, "Vault rules changed"
+        end
+    end
+    for _, key in ipairs(FV_KEYS) do
+        if not fvSame(fvRead(fvCache, key), FV_PATCH[key]) then
+            if not fvSetKey(fvCache, key, FV_PATCH[key]) then
+                fvRestore()
+                return false, "Could not apply vault rules"
+            end
+        end
+    end
+    return true
+end
+
+local function fvResolve(characterId)
+    if fvResolving or fvAttemptedFor == characterId then return end
+    fvResolving, fvAttemptedFor = true, characterId
+    fvStat.status = "Resolving vault module"
+    task.spawn(function()
+        task.wait(0.35)
+        if not state.running or not state.cfg.fv_enabled then
+            fvResolving, fvAttemptedFor = false, nil
+            return
+        end
+        local ok, cache, err = pcall(function()
+            if vaultCacheSeed and vaultCacheSeed.job == game.JobId then
+                local reused = fvBuildCache(vaultCacheSeed.rows)
+                vaultCacheSeed = nil
+                if reused then return reused end
+            end
+            -- A scan is done only on first enable, or after a failed resolve
+            -- and a new character. A healthy cache survives ordinary respawns.
+            fvStat.scans = fvStat.scans + 1
+            local rows = findgc("REPEAT_WINDOW_TIME", {
+                DISTANCE="number", REPEAT_DISTANCE="number", DOT="number",
+                MIN_SPEED="number", ARRIVE_GRACE="number",
+            })
+            return fvBuildCache(rows)
+        end)
+        fvResolving = false
+        if not state.running then return end
+        if ok and cache then
+            fvCache, state._vaultCache = cache, cache
+            fvStat.ready, fvStat.error = true, nil
+        else
+            fvStat.error = tostring(ok and err or cache)
+            fvStat.status = "Waiting for survivor module"
+        end
+    end)
+end
+
+local function fvObserveVault()
+    local ch = lp.Character
+    local id = ch and ch.Address
+    if id ~= fvCharId then
+        fvCharId, fvLastCount = id, nil
+        fvStat.tier, fvStat.reason = nil, nil
+    end
+    if not ch then return nil end
+    local count = ch:GetAttribute("__VaultFireCount")
+    local tier, reason = ch:GetAttribute("VaultTier"), ch:GetAttribute("VaultReason")
+    if type(count) == "number" then
+        if fvLastCount and count > fvLastCount then
+            local delta = count - fvLastCount
+            fvStat.vaults = fvStat.vaults + delta
+            if tier == "fast" then fvStat.fast = fvStat.fast + delta end
+        end
+        fvLastCount = count
+    end
+    if type(tier) == "string" then fvStat.tier = tier end
+    if type(reason) == "string" then fvStat.reason = reason end
+    return id
+end
+
+task.spawn(function()
+    while state.running do
+        local ok, err = pcall(function()
+            local id = fvObserveVault()
+            if not state.cfg.fv_enabled then
+                local restored = fvRestore()
+                if restored then fvFault = nil end
+                fvStat.status = restored and "Disabled" or "Restore pending: enable Unsafe LuaU"
+            elseif not unsafeOn() then
+                fvStat.status = fvHasWrites() and "Restore pending: enable Unsafe LuaU" or "Enable Unsafe LuaU"
+            elseif not fvCache then
+                if id then fvResolve(id) else fvStat.status = "Waiting for character" end
+            elseif fvFault then
+                fvStat.status = fvFault
+            else
+                local applied, why = fvApply()
+                fvStat.holding = applied
+                fvStat.status = applied and "Ready - sprint to vault" or why
+                fvStat.error = applied and nil or why
+                if not applied then fvFault = why end
+            end
+        end)
+        if not ok then
+            fvStat.error, fvStat.status = tostring(err), "Retrying after read error"
+        end
+        task.wait(0.2)
+    end
+end)
+
+--======================================================================
+--  VEIL SPEAR AIMBOT
+--
+--  Everything here is derived from the game's own two scripts, not probed:
+--
+--   Workspace.<killer>.Animations  (the throw)
+--     line 308:  Spearthrow:FireServer(cam.CFrame.LookVector, speed,
+--                                      cam.CFrame.Position)
+--     The DIRECTION is a client argument. Point the camera and the spear
+--     goes there -- no state is faked, the server resolves the hit itself.
+--     lines 285-297 give speed purely from hold time; line ~400 auto-
+--     releases at 7s; a 165 throw starts a 30s move cooldown.
+--
+--   PlayerScripts.Mechanics.Veil.ProjectileHandler  (the flight)
+--     lines 36-45:  v += (0, -g*dt*GMult, 0);  p += v*dt   on Heartbeat
+--     line 65:      origin = HRP.Position + HRP.LookVector*3 + (0,1.5,0)
+--
+--  So the aim is a boundary-value problem: fixed launch speed, known
+--  gravity, solve the launch angle that puts the spear where the target
+--  will BE, against the discrete integrator the game actually runs.
+--======================================================================
+
+-- The camera's rotation matrix. Camera.CFrame is READ-ONLY through the
+-- Matcha property bridge -- the write returns true and silently no-ops
+-- (FieldOfView writes fine, and Part.CFrame writes fine, so it is specific
+-- to this one property). Memory is the only channel.
+--
+-- Layout mirrors a Part's Primitive: row-major 3x3 then the position triple
+-- 0x24 later. Currently at Camera+0xD8, but Roblox moves these between
+-- versions (HRP's Primitive pointer already moved 0x128 -> 0x188), so it is
+-- resolved by matching the live CFrame instead of trusted as a constant.
+-- Three copies of the block exist; only the first is authoritative -- writes
+-- to +0x184 and +0x244 had no effect on cam.CFrame.LookVector.
+local vaRot, vaRotFor, vaWarmAt = nil, nil, 0
+
+local function vaRotAddr()
+    local cam = Workspace.CurrentCamera
+    if not cam then return nil end
+    local base = cam.Address
+    if not base then return nil end
+    if vaRotFor == base and vaRot then return vaRot end
+
+    local now = os.clock()
+    if now < vaWarmAt then return nil end
+    vaWarmAt = now + 0.1
+
+    local ok, res = pcall(function()
+        local cf  = cam.CFrame
+        if not cf then return nil end
+        local lv, pos = cf.LookVector, cf.Position
+        local function near(a, b, tol) return a and math.abs(a - b) <= tol end
+        -- known-good slot first, then a sweep
+        local cand = { 0xD8 }
+        for o = 0x40, 0x400, 4 do cand[#cand+1] = o end
+        for _, o in ipairs(cand) do
+            -- column 2 of the rotation is -LookVector; position sits at +0x24
+            if near(rdf(base + o +  8), -lv.X, 0.01)
+           and near(rdf(base + o + 20), -lv.Y, 0.01)
+           and near(rdf(base + o + 32), -lv.Z, 0.01)
+           and near(rdf(base + o + 36), pos.X, 0.05)
+           and near(rdf(base + o + 40), pos.Y, 0.05)
+           and near(rdf(base + o + 44), pos.Z, 0.05) then
+                return o
+            end
+        end
+        return nil
+    end)
+    if ok and res then
+        vaRot, vaRotFor = base + res, base
+        return vaRot
+    end
+end
+
+-- Write a look direction as an orthonormal basis. Column 0 = right,
+-- column 1 = up, column 2 = -look, stored in row-major order.
+local UP = Vector3.new(0, 1, 0)
+local function vaWriteLook(addr, f)
+    if not addr or not f then return false end
+    local zv = -f
+    local xv = UP:Cross(zv)
+    if xv.Magnitude < 1e-4 then return false end        -- looking straight up/down
+    xv = xv.Unit
+    local yv = zv:Cross(xv)
+    local ok = pcall(function()
+        memory_write("float", addr +  0, xv.X)
+        memory_write("float", addr +  4, yv.X)
+        memory_write("float", addr +  8, zv.X)
+        memory_write("float", addr + 12, xv.Y)
+        memory_write("float", addr + 16, yv.Y)
+        memory_write("float", addr + 20, zv.Y)
+        memory_write("float", addr + 24, xv.Z)
+        memory_write("float", addr + 28, yv.Z)
+        memory_write("float", addr + 32, zv.Z)
+    end)
+    return ok
+end
+
+-- workspace.Gravity reads nil in Matcha (unsupported binding). It lives at
+-- Workspace+0x9C8 -- verified as the single float/double hit across 0..0x1200.
+-- Validated per read so a moved offset falls back instead of poisoning the solve.
+local VA_G_DEFAULT = 196.2
+local function vaBaseG()
+    local a = Workspace.Address
+    if a then
+        local g = rdf(a + 0x9C8)
+        if g and g > 20 and g < 2000 then return g end
+    end
+    return VA_G_DEFAULT
+end
+
+-- The game's Heartbeat step. Only used for the discrete-drop correction.
+local VA_DT = 1 / 60
+
+local vaStat = {
+    target = nil, dist = nil, speed = nil, flight = nil, hold = 0,
+    solved = false, tier = nil, cd = 0, drop = nil,
+    measG = nil, measN = 0, gmult = nil, charging = false, addr = false,
+}
+local vaCdUntil = 0
+
+--  Closed form for a fixed launch speed: solve for tan(theta) from
+--    y = x*tan - g*x^2 / (2*s^2*cos^2)   ->   quadratic in tan
+--  Two roots; take the low/flat arc (the fast one, and the one that stays
+--  under ceilings). disc < 0 means the target is simply out of range.
+local function vaAngle(ox, oy, oz, px, py, pz, s, g)
+    local dx, dy, dz = px - ox, py - oy, pz - oz
+    local flat = math.sqrt(dx * dx + dz * dz)
+    if flat < 1e-3 then return nil end
+    local s2 = s * s
+    local disc = s2 * s2 - g * (g * flat * flat + 2 * dy * s2)
+    if disc < 0 then return nil end
+    local tan = (s2 - math.sqrt(disc)) / (g * flat)
+    local ang = math.atan(tan)
+    local ca, sa = math.cos(ang), math.sin(ang)
+    if ca < 1e-4 then return nil end
+    return Vector3.new(dx / flat * ca, sa, dz / flat * ca), flat / (s * ca)
+end
+
+-- Same solve, but against the integrator's effective gravity. Semi-implicit
+-- Euler's excess drop is 0.5*g*dt*t, i.e. exactly what g*(1 + dt/t) produces
+-- in the closed form -- so a couple of fixed-point steps put the analytic
+-- solution onto the discrete curve.
+local function vaSolve(ox, oy, oz, px, py, pz, s, g, euler)
+    local dir, ft = vaAngle(ox, oy, oz, px, py, pz, s, g)
+    if not dir then return nil end
+    if euler then
+        for _ = 1, 4 do
+            local ge = g * (1 + VA_DT / math.max(ft, 1e-3))
+            local d2, f2 = vaAngle(ox, oy, oz, px, py, pz, s, ge)
+            if not d2 then break end
+            local done = math.abs(f2 - ft) < 1e-4
+            dir, ft = d2, f2
+            if done then break end
+        end
+    end
+    return dir, ft
+end
+
+-- Lead: the flight time depends on where the target will be, which depends
+-- on the flight time. Iterate to the fixed point.
+local function vaIntercept(o, tp, tv, s, g, euler)
+    local dir, ft = vaSolve(o.X, o.Y, o.Z, tp.X, tp.Y, tp.Z, s, g, euler)
+    if not dir then return nil end
+    if tv then
+        for _ = 1, 6 do
+            local d2, f2 = vaSolve(o.X, o.Y, o.Z,
+                tp.X + tv.X * ft, tp.Y + tv.Y * ft, tp.Z + tv.Z * ft, s, g, euler)
+            if not d2 then break end
+            local done = math.abs(f2 - ft) < 0.002
+            dir, ft = d2, f2
+            if done then break end
+        end
+    end
+    return dir, ft
+end
+
+-- Speed the spear will leave at for a given hold, mirroring Animations 285-297
+-- including the 30s lockout that follows a charged (165) throw.
+local function vaSpeedFor(hold, now)
+    if hold >= 2 and now >= vaCdUntil then return 165, "CHARGED" end
+    if hold >= 1 then return 142.5, "FULL" end
+    return math.max(hold * 150, 1), "PARTIAL"
+end
+
+--  Target tracking. Velocity is differenced from position history rather than
+--  read off a .Velocity binding -- differencing is guaranteed to work here and
+--  it also smooths the 1-frame jitter that would otherwise swing the lead.
+local vaHist = {}
+
+local function vaTrack(key, pos, now)
+    local h = vaHist[key]
+    if not h then
+        vaHist[key] = { p = pos, t = now, v = Vector3.new(0, 0, 0) }
+        return Vector3.new(0, 0, 0)
+    end
+    local dt = now - h.t
+    if dt >= 0.02 then
+        local inst = (pos - h.p) / dt
+        -- clamp to something a survivor can physically do, then EMA
+        if inst.Magnitude > 60 then inst = inst.Unit * 60 end
+        h.v = h.v + (inst - h.v) * 0.35
+        h.p, h.t = pos, now
+    end
+    return h.v
+end
+
+local vaRP = RaycastParams.new()
+vaRP.FilterType = Enum.RaycastFilterType.Exclude
+
+-- Matcha's workspace:Raycast is a STUB. It is a real function, it never errors,
+-- and it returns nil for every cast -- verified by casting 40 studs straight
+-- down into the floor we were standing on, both with and without RaycastParams:
+-- nil each time. Blockcast pcalls false and Spherecast is absent, so this VM has
+-- NO geometry probe at all.
+--
+-- That is a trap, because "nil hit" is exactly how a raycast reports "clear".
+-- A naive LOS test therefore passes every single shot while looking like it
+-- filters -- a toggle that cannot do what its label claims. So probe the binding
+-- once against a ray that CANNOT miss (downward through our own character) and
+-- latch the answer; the UI reads vaStat.losOK and says "unavailable" rather than
+-- pretending the filter is live.
+local vaRayCap = nil                -- nil = not yet probed, true = real, false = stub
+local function vaRayUsable(myChar)
+    if vaRayCap ~= nil then return vaRayCap end
+    local hrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not hrp then return true end -- nothing to probe against yet; don't latch
+    local ok, hit = pcall(function()
+        local from = hrp.CFrame.Position + Vector3.new(0, 6, 0)
+        return Workspace:Raycast(from, Vector3.new(0, -12, 0))
+    end)
+    vaRayCap = (ok and hit ~= nil) and true or false
+    vaStat.losOK = vaRayCap
+    return vaRayCap
+end
+
+local function vaLineOfSight(o, p, myChar, theirChar)
+    if not vaRayUsable(myChar) then return true end
+    local d = p - o
+    local dist = d.Magnitude
+    if dist < 1 then return true end
+    local ok, hit = pcall(function()
+        vaRP.FilterDescendantsInstances = { myChar, theirChar }
+        return Workspace:Raycast(o, d, vaRP)
+    end)
+    if not ok then return true end          -- can't test -> don't block the shot
+    return hit == nil
+end
+
+--======================================================================
+--  ARC MEASUREMENT  (turns real throws into a calibrated GMult)
+--
+--  GMult is chosen server-side per throw and handed to the client only as a
+--  `visualize` argument -- and RemoteEvent.OnClientEvent is nil in Matcha, so
+--  it cannot be intercepted. But the client's own projectile is integrated
+--  with that exact GMult, so watching one flight measures it directly.
+--
+--  y_n under the discrete scheme is
+--     y0 + v0*t - 0.5*g*t^2 - 0.5*g*dt*t
+--  which is an exact quadratic in t whose curvature is -0.5*g. So a plain
+--  least-squares quadratic recovers g*GMult unbiased -- the half-step bias
+--  lands entirely in the linear term.
+--======================================================================
+local vaFit = nil
+
+local function vaFitReset() vaFit = nil end
+
+local function vaFitPush(t, y)
+    if not vaFit then
+        vaFit = { n = 0, t0 = t, s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, y0 = 0, y1 = 0, y2 = 0 }
+    end
+    local f = vaFit
+    local x  = t - f.t0
+    local x2 = x * x
+    f.n  = f.n + 1
+    f.s0 = f.s0 + 1
+    f.s1 = f.s1 + x
+    f.s2 = f.s2 + x2
+    f.s3 = f.s3 + x2 * x
+    f.s4 = f.s4 + x2 * x2
+    f.y0 = f.y0 + y
+    f.y1 = f.y1 + y * x
+    f.y2 = f.y2 + y * x2
+    f.span = x
+end
+
+-- returns measured downward accel, or nil
+local function vaFitSolve()
+    local f = vaFit
+    if not f or f.n < 8 or (f.span or 0) < 0.12 then return nil end
+    local a11, a12, a13 = f.s0, f.s1, f.s2
+    local a21, a22, a23 = f.s1, f.s2, f.s3
+    local a31, a32, a33 = f.s2, f.s3, f.s4
+    local function det3(b11,b12,b13, b21,b22,b23, b31,b32,b33)
+        return b11*(b22*b33 - b23*b32) - b12*(b21*b33 - b23*b31) + b13*(b21*b32 - b22*b31)
+    end
+    local D = det3(a11,a12,a13, a21,a22,a23, a31,a32,a33)
+    if math.abs(D) < 1e-12 then return nil end
+    -- only the quadratic coefficient is needed: c2 = -0.5*g
+    local D2 = det3(a11,a12,f.y0, a21,a22,f.y1, a31,a32,f.y2)
+    local c2 = D2 / D
+    local g = -2 * c2
+    if g < 20 or g > 3000 then return nil end
+    return g
+end
+
+--======================================================================
+--  DRIVER
+--======================================================================
+task.spawn(function()
+    local gateAt, isKiller, spearmode = 0, false, false
+    local myChar, myHum = nil, nil
+    local pressT, wasDown, releaseArmed = nil, false, false
+    local prevProj = false
+    local lastT, lockName = nil, nil
+
+    while state.running do
+        local c   = state.cfg
+        local now = os.clock()
+        -- Real frame delta. Smoothing needs this to be a time constant rather than
+        -- a per-iteration fraction, or its feel changes with the loop rate. Clamped
+        -- so a stall cannot produce alpha ~= 1 and teleport the aim.
+        local dt = (lastT and (now - lastT)) or VA_DT
+        lastT = now
+        if dt <= 0 then dt = VA_DT elseif dt > 0.25 then dt = 0.25 end
+
+        --------------------------------------------------------------
+        -- cheap gate, refreshed at 10Hz (attribute + team reads are the
+        -- expensive part, and neither changes inside 100ms)
+        --------------------------------------------------------------
+        if now >= gateAt then
+            gateAt = now + 0.1
+            local okg = pcall(function()
+                myChar = lp.Character
+                local team = lp.Team
+                isKiller = (team and team.Name == "Killer") and true or false
+                myHum  = myChar and myChar:FindFirstChild("Humanoid")
+                spearmode = myChar and myChar:GetAttribute("spearmode") == true
+                -- latch the raycast-capability probe as soon as there is a body to
+                -- cast through, so the LOS chip tells the truth before the first
+                -- target is ever evaluated
+                if myChar then vaRayUsable(myChar) end
+            end)
+            if not okg then isKiller, spearmode = false, false end
+        end
+
+        --------------------------------------------------------------
+        -- charge timing. The game measures hold from its own input-begin,
+        -- so pressing and holding the same button gives us the same clock.
+        -- Presses that started on the hub's own panel are ignored.
+        --------------------------------------------------------------
+        local down = false
+        if not uiCapture then
+            local okm, v = pcall(ismouse1pressed)
+            down = okm and v and true or false
+        end
+        if down and not wasDown then
+            pressT, releaseArmed = now, true
+        elseif (not down) and wasDown and releaseArmed then
+            -- mirror the 30s lockout a charged throw starts
+            local held = pressT and (now - pressT) or 0
+            if held >= 2 and now >= vaCdUntil then vaCdUntil = now + 30 end
+            pressT, releaseArmed = nil, false
+        end
+        wasDown = down
+        local hold = pressT and math.min(now - pressT, 7) or 0
+        vaStat.hold     = hold
+        vaStat.cd       = math.max(0, vaCdUntil - now)
+        vaStat.charging = (pressT ~= nil)
+
+        --------------------------------------------------------------
+        -- arc measurement: sample the live projectile while it exists
+        --------------------------------------------------------------
+        if c.va_autocal or true then
+            local proj = nil
+            pcall(function() proj = Workspace:FindFirstChild("Spearprojectile") end)
+            if proj then
+                if not prevProj then vaFitReset() end
+                prevProj = true
+                pcall(function()
+                    local pp = proj.PrimaryPart or proj:FindFirstChild("Spear1")
+                    if pp then vaFitPush(now, pp.Position.Y) end
+                end)
+            elseif prevProj then
+                prevProj = false
+                local g = vaFitSolve()
+                if g then
+                    local base = vaBaseG()
+                    vaStat.measG = g
+                    vaStat.measN = (vaStat.measN or 0) + 1
+                    vaStat.gmult = g / base
+                    if c.va_autocal then
+                        -- snap on the first arc of a session, then EMA so one
+                        -- bad fit can't wrench the aim
+                        local cur = c.va_gmult or 1
+                        local w = ((vaStat.measN or 0) <= 1) and 1 or 0.6
+                        c.va_gmult = cur + (vaStat.gmult - cur) * w
+                    end
+                end
+                vaFitReset()
+            end
+        end
+
+        --------------------------------------------------------------
+        -- aim
+        --------------------------------------------------------------
+        local armed = c.va_enabled and isKiller and spearmode and unsafeOn()
+        if armed and c.va_holdOnly and not vaStat.charging then armed = false end
+
+        if not armed then
+            vaStat.target, vaStat.solved, vaStat.dist = nil, false, nil
+            vaStat.speed, vaStat.flight, vaStat.drop, vaStat.tier = nil, nil, nil, nil
+            lockName, vaStat.held = nil, false
+        else
+            local addr = vaRotAddr()
+            vaStat.addr = addr ~= nil
+            local cam = Workspace.CurrentCamera
+            local hrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            if addr and cam and hrp then
+                local okAim = pcall(function()
+                    local ccf  = cam.CFrame
+                    local look = ccf.LookVector
+                    local hcf  = hrp.CFrame
+
+                    -- launch origin
+                    local origin
+                    if c.va_originCam then
+                        origin = ccf.Position
+                    else
+                        origin = hcf.Position + hcf.LookVector * 3 + Vector3.new(0, 1.5, 0)
+                    end
+
+                    local speed, tier = vaSpeedFor(hold, now)
+                    local g = vaBaseG() * (c.va_gmult or 1)
+                    local cosFov = math.cos(math.rad(c.va_fov))
+
+                    --------------------------------------------------
+                    -- Pick a target. NEAREST enemy wins (was: closest to
+                    -- the crosshair), among survivors that are alive, in
+                    -- range, in FOV and actually reachable at this speed.
+                    --
+                    -- Sticky aim then overrides that: the target we already
+                    -- hold keeps the lock for as long as it still passes
+                    -- every one of those gates. Without it, a survivor
+                    -- jogging past closer than your real target steals the
+                    -- aim mid-charge and the spear leaves on the flick.
+                    -- The lock is dropped when the target dies, leaves
+                    -- range, or the throw ends (see the disarm branch).
+                    --------------------------------------------------
+                    local best, bestSol, bestFt, bestDist
+                    local heldSol, heldFt, heldDist
+                    for _, pl in ipairs(Players:GetPlayers()) do
+                        if pl ~= lp then
+                            local tm = pl.Team
+                            if tm and tm.Name == "Survivors" then
+                                local ch  = pl.Character
+                                local thr = ch and ch:FindFirstChild("HumanoidRootPart")
+                                local hum = ch and ch:FindFirstChild("Humanoid")
+                                local hp  = hum and hum.Health
+                                if thr and (type(hp) ~= "number" or hp > 0) then
+                                    local tp = thr.Position + Vector3.new(0, c.va_aimHeight or 0, 0)
+                                    local off = tp - origin
+                                    local dist = off.Magnitude
+                                    if dist > 1 and dist <= c.va_range then
+                                        local isHeld = c.va_sticky and lockName == pl.Name
+                                        local dot = off.Unit:Dot(look)
+                                        -- solving is the expensive part, so only solve
+                                        -- for a candidate that could actually win
+                                        if dot >= cosFov
+                                           and ((not best or dist < bestDist) or isHeld) then
+                                            local tv = c.va_lead and vaTrack(pl.Name, thr.Position, now) or nil
+                                            local dir, ft = vaIntercept(origin, tp, tv, speed, g, c.va_euler)
+                                            if dir and ((not c.va_los)
+                                                or vaLineOfSight(origin, tp, myChar, ch)) then
+                                                if isHeld then
+                                                    heldSol, heldFt, heldDist = dir, ft, dist
+                                                end
+                                                if not best or dist < bestDist then
+                                                    best = pl.Name
+                                                    bestSol, bestFt, bestDist = dir, ft, dist
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    -- the held target survived every gate -> keep it
+                    if heldSol then
+                        best = lockName
+                        bestSol, bestFt, bestDist = heldSol, heldFt, heldDist
+                    end
+                    lockName    = best
+                    vaStat.held = heldSol ~= nil
+
+                    vaStat.target = best
+                    vaStat.speed  = speed
+                    vaStat.tier   = tier
+                    vaStat.dist   = bestDist
+                    vaStat.flight = bestFt
+                    vaStat.solved = bestSol ~= nil
+                    -- how far above the straight line we are holding, in studs
+                    vaStat.drop = bestFt and (0.5 * g * bestFt * bestFt + 0.5 * g * VA_DT * bestFt) or nil
+
+                    if bestSol then
+                        local want = bestSol
+                        local sm = c.va_smooth or 1
+                        if sm > 1 then
+                            -- Exponential approach on a real time constant, so the feel
+                            -- is identical at 60Hz and at 144Hz. Smoothing from the
+                            -- camera's ACTUAL direction (not from our own last command)
+                            -- is deliberate: it lets your mouse move the camera and
+                            -- have the assist ease in from wherever you left it,
+                            -- instead of fighting you frame by frame.
+                            local tau   = (sm - 1) * 0.015
+                            local a     = 1 - math.exp(-dt / tau)
+                            local blend = look + (want - look) * a
+                            if blend.Magnitude > 1e-4 then want = blend.Unit end
+                        end
+                        vaWriteLook(addr, want)
+                    end
+                end)
+                if not okAim then vaStat.solved = false end
+            else
+                vaStat.solved = false
+            end
+        end
+
+        task.wait(1 / 144)
+    end
+end)
+
+--======================================================================
+--  UI  (Drawing immediate-mode)
+--======================================================================
+local UX, UY    = 60, 120
+local UW, UH    = 448, 412
+local RAIL      = 118            -- left nav column
+local HEAD      = 34             -- title bar height
+local minimized = false
+
+--======================================================================
+--  THEMES
+--  Every palette carries the same key set, and applyTheme copies into the
+--  SAME COL table rather than rebinding it -- so every widget below keeps
+--  its existing upvalue and the switch is instant with no relayout.
+--======================================================================
+local function C(r, g, b) return Color3.fromRGB(r, g, b) end
+
+local THEMES = {
+    { name = "Midnight",
+      bg=C(16,16,24),   bg2=C(23,23,34),  bar=C(40,29,78),  barTo=C(19,17,38),
+      panel=C(29,29,44), border=C(52,47,82), accent=C(134,104,255), accent2=C(96,204,255),
+      on=C(94,214,142), off=C(70,70,92),  text=C(237,237,249), dim=C(145,145,176),
+      warn=C(246,188,94), bad=C(238,102,110), shadow=C(0,0,0), knob=C(247,247,253) },
+
+    { name = "Ember",
+      bg=C(20,14,12),   bg2=C(28,20,17),  bar=C(84,32,16),  barTo=C(36,17,11),
+      panel=C(35,24,20), border=C(78,49,37), accent=C(255,132,54), accent2=C(255,198,84),
+      on=C(232,148,54), off=C(84,62,54),  text=C(251,239,231), dim=C(178,148,133),
+      warn=C(255,206,110), bad=C(240,86,72), shadow=C(0,0,0), knob=C(253,246,240) },
+
+    { name = "Toxic",
+      bg=C(12,20,14),   bg2=C(17,28,20),  bar=C(24,72,38),  barTo=C(12,32,19),
+      panel=C(21,35,25), border=C(42,76,50), accent=C(124,242,120), accent2=C(204,255,118),
+      on=C(124,242,120), off=C(58,82,64),  text=C(233,251,235), dim=C(137,177,145),
+      warn=C(232,232,110), bad=C(246,110,96), shadow=C(0,0,0), knob=C(244,253,244) },
+
+    { name = "Abyss",
+      bg=C(10,16,26),   bg2=C(15,23,36),  bar=C(16,54,90),  barTo=C(10,24,44),
+      panel=C(19,29,45), border=C(35,62,93), accent=C(86,196,255), accent2=C(128,240,220),
+      on=C(88,214,178), off=C(55,74,98),  text=C(231,243,255), dim=C(131,158,190),
+      warn=C(246,198,104), bad=C(240,104,124), shadow=C(0,0,0), knob=C(240,250,255) },
+
+    { name = "Rosewood",
+      bg=C(22,12,20),   bg2=C(30,17,28),  bar=C(84,24,60),  barTo=C(38,13,29),
+      panel=C(37,21,33), border=C(77,42,66), accent=C(255,110,180), accent2=C(255,172,212),
+      on=C(226,122,190), off=C(83,56,74),  text=C(253,235,247), dim=C(185,141,169),
+      warn=C(250,196,120), bad=C(246,92,110), shadow=C(0,0,0), knob=C(254,244,250) },
+
+    { name = "Paper",
+      bg=C(239,239,246), bg2=C(250,250,253), bar=C(228,228,240), barTo=C(207,207,226),
+      panel=C(227,227,239), border=C(198,198,216), accent=C(88,70,220), accent2=C(24,148,198),
+      on=C(38,158,88),  off=C(174,174,192), text=C(27,27,40),  dim=C(108,108,130),
+      warn=C(176,118,20), bad=C(198,48,58), shadow=C(118,118,142), knob=C(255,255,255) },
+}
+
+local COL = {}
+-- Copy into the SAME table (never rebind) so every widget's upvalue stays
+-- valid, and fall back to Midnight for any key a palette forgets -- a nil
+-- Color3 would otherwise throw mid-frame and blank the whole overlay.
+local function applyTheme(i)
+    local base = THEMES[1]
+    local t = THEMES[i] or base
+    for k, v in pairs(base) do COL[k] = t[k] or v end
+end
+applyTheme(state.cfg.theme)
+
+local function lerpC(a, b, t)
+    return Color3.fromRGB(
+        math.floor(a.R * 255 + (b.R * 255 - a.R * 255) * t + 0.5),
+        math.floor(a.G * 255 + (b.G * 255 - a.G * 255) * t + 0.5),
+        math.floor(a.B * 255 + (b.B * 255 - a.B * 255) * t + 0.5))
+end
+
+--======================================================================
+--  DRAW POOLS
+--  The old pools were a hard 64/64 and S()/T() silently returned nil once
+--  exhausted -- a richer layout would just stop rendering halfway with no
+--  error. They now grow on demand instead, so the layout can never be
+--  truncated by its own budget.
+--======================================================================
+-- Draw order here was implicit, and therefore not portable. Nothing in this file
+-- ever set ZIndex, so all 200 squares and all 96 texts tied at 0 and each
+-- executor was free to sort that tie however it liked. On this machine the text
+-- happened to win; on a shared copy the panel fills painted straight over it and
+-- the UI came out with no readable text at all. So layer it explicitly: squares
+-- in paint order, every text above every square. No tiebreak left to lose.
+--
+-- Font INDICES are not portable, so don't hardcode one. Index 2 is SystemBold in
+-- Matcha but Plex on Synapse-style builds, and Matcha's table (UI=0, System=1,
+-- SystemBold=2, Minecraft=4, Monospace=5, Pixel=7, Fortnite=8,
+-- ProximaSoftBold=11) looks nothing like the standard four. An index this build
+-- doesn't define can render nothing while squares still draw -- which from the
+-- outside is indistinguishable from the ZIndex bug above. So resolve by NAME
+-- down a preference list and end at 0 (UI), which every build defines.
+local Z_TEXT   = 4096
+local FONT     = 0
+local FONTNAME = "UI(default 0)"
+do
+    local fonts = Drawing.Fonts
+    if type(fonts) == "table" then
+        for _, name in ipairs({ "SystemBold", "System", "UI" }) do
+            local v = fonts[name]
+            if type(v) == "number" then FONT, FONTNAME = v, name break end
+        end
+    end
+end
+
+local sq, tx = {}, {}
+local Z_OK = false
+local function newSquare(i)
+    local s = Drawing.new("Square")
+    s.Filled = true
+    s.Visible = false
+    if Z_OK then pcall(function() s.ZIndex = i end) end
+    return s
+end
+local function newText(i)
+    local t = Drawing.new("Text")
+    t.Size = 14
+    t.Font = FONT
+    t.Visible = false
+    if Z_OK then pcall(function() t.ZIndex = Z_TEXT + i end) end
+    return t
+end
+-- Probe ZIndex support on the first real pool object, not a throwaway: a Drawing
+-- whose last reference is lost stays on screen for the life of the VM.
+sq[1] = newSquare(1)
+Z_OK  = pcall(function() sq[1].ZIndex = 1 end)
+for i = 2, 200 do sq[i] = newSquare(i) end
+for i = 1, 96  do tx[i] = newText(i)   end
+
+local siUse, tiUse = 0, 0
+local OPA = 1
+
+-- filled rect (round = corner radius in px)
+local function S(x, y, w, h, color, round, trans)
+    siUse = siUse + 1
+    local o = sq[siUse]
+    if not o then o = newSquare(siUse); sq[siUse] = o end
+    o.Position = Vector2.new(x, y); o.Size = Vector2.new(w, h)
+    o.Color = color; o.Filled = true; o.Thickness = 1
+    o.Rounding = round or 0
+    o.Transparency = trans or OPA
+    o.Visible = true
+    return o
+end
+
+-- outline rect
+local function SO(x, y, w, h, color, round, trans, thick)
+    siUse = siUse + 1
+    local o = sq[siUse]
+    if not o then o = newSquare(siUse); sq[siUse] = o end
+    o.Position = Vector2.new(x, y); o.Size = Vector2.new(w, h)
+    o.Color = color; o.Filled = false; o.Thickness = thick or 1
+    o.Rounding = round or 0
+    o.Transparency = trans or OPA
+    o.Visible = true
+    return o
+end
+
+local function T(str, x, y, size, color, center, trans)
+    tiUse = tiUse + 1
+    local o = tx[tiUse]
+    if not o then o = newText(tiUse); tx[tiUse] = o end
+    o.Text = str; o.Position = Vector2.new(x, y); o.Size = size or 14
+    o.Color = color or COL.text; o.Center = center or false
+    o.Transparency = trans or OPA
+    o.Visible = true
+    return o
+end
+
+-- vertical gradient in n bands (cheaper than per-pixel and smooth enough
+-- at header scale)
+local function grad(x, y, w, h, c1, c2, n, round)
+    n = n or 12
+    local bh = h / n
+    for i = 0, n - 1 do
+        local c = lerpC(c1, c2, i / (n - 1))
+        S(x, y + i * bh, w, bh + 1, c, (i == 0 or i == n - 1) and round or 0)
+    end
+end
+
+--======================================================================
+--  INPUT  (immediate mode: this frame's click resolves against LAST
+--  frame's rects, which are laid out identically)
+--======================================================================
+local mDown, mPrev = false, false
+local hot, prevHot = {}, {}
+local function rect(id, x, y, w, h) hot[id] = {x=x, y=y, w=w, h=h} end
+local function inRect(r, mx, my) return mx>=r.x and mx<=r.x+r.w and my>=r.y and my<=r.y+r.h end
+local clickedId = nil
+local hoverId   = nil
+local dragging, dragOff = false, {x=0, y=0}
+
+--======================================================================
+--  WIDGETS
+--======================================================================
+local R = 6      -- refreshed from cfg each frame
+
+local function section(label, x, y, w)
+    T(label:upper(), x, y, 11, COL.dim)
+    S(x, y + 15, w, 1, COL.border)
+    return 22
+end
+
+local function card(x, y, w, h)
+    S(x, y, w, h, COL.bg2, R)
+    SO(x, y, w, h, COL.border, R)
+end
+
+local function toggleRow(label, x, y, w, get, set)
+    local id  = "tg_" .. label
+    local on  = get()
+    local hov = (hoverId == id)
+    S(x - 6, y - 3, w + 12, 28, hov and COL.panel or COL.bg2, R, hov and OPA or math.min(OPA, 0.55))
+    T(label, x, y + 3, 14, on and COL.text or COL.dim)
+    local tw, th = 40, 20
+    local tx0 = x + w - tw
+    S(tx0, y + 1, tw, th, on and COL.accent or COL.off, th / 2)
+    if on then SO(tx0 - 2, y - 1, tw + 4, th + 4, COL.accent, (th + 4) / 2, 0.35) end
+    S(on and (tx0 + tw - 18) or (tx0 + 2), y + 3, 16, 16, COL.knob, 8)
+    rect(id, x - 6, y - 3, w + 12, 28)
+    if clickedId == id then set(not on) end
+    return 32
+end
+
+-- compact 2-per-row on/off pill, for the secondary switches
+local function chip(label, x, y, w, get, set)
+    local id  = "cp_" .. label
+    local on  = get()
+    local hov = (hoverId == id)
+    S(x, y, w, 24, on and COL.accent or COL.panel, R, on and OPA or math.min(OPA, 0.8))
+    if hov then SO(x, y, w, 24, on and COL.accent2 or COL.border, R) end
+    S(x + 8, y + 8, 8, 8, on and COL.knob or COL.off, 4)
+    T(label, x + 22, y + 4, 12, on and COL.knob or COL.dim)
+    rect(id, x, y, w, 24)
+    if clickedId == id then set(not on) end
+    return 28
+end
+
+local function stepper(label, x, y, w, get, set, lo, hi, step, fmt)
+    local val = get()
+    T(label, x, y + 4, 13, COL.dim)
+    local bw = 24
+    local mx0 = x + w - bw * 2 - 4
+    local px0 = x + w - bw
+    -- value sits in its own well so the number is readable at any theme
+    S(mx0 - 70, y, 66, 22, COL.panel, R)
+    T((fmt or "%s"):format(val), mx0 - 37, y + 3, 13, COL.text, true)
+    local hm, hp = (hoverId == "minus_" .. label), (hoverId == "plus_" .. label)
+    S(mx0, y, bw, 22, hm and COL.accent or COL.panel, R)
+    T("-", mx0 + bw / 2, y + 1, 16, hm and COL.knob or COL.text, true)
+    S(px0, y, bw, 22, hp and COL.accent or COL.panel, R)
+    T("+", px0 + bw / 2, y + 1, 16, hp and COL.knob or COL.text, true)
+    rect("minus_" .. label, mx0, y, bw, 22)
+    rect("plus_"  .. label, px0, y, bw, 22)
+    if clickedId == "minus_" .. label then set(math.max(lo, val - step)) end
+    if clickedId == "plus_"  .. label then set(math.min(hi, val + step)) end
+    return 26
+end
+
+-- label left, value hard right. Drawing has no right-align, but Text.TextBounds
+-- is readable and updates with the string, so the value is measured and then
+-- repositioned -- otherwise long values ("0.659s / 42.6") run off the card.
+local function statRight(label, value, x, y, w, col)
+    T(label, x, y, 12, COL.dim)
+    local o = T(value, x, y, 12, col or COL.text)
+    if o then
+        local bw = 0
+        local okb, b = pcall(function() return o.TextBounds end)
+        if okb and b then bw = b.X end
+        o.Position = Vector2.new(x + w - bw, y)
+    end
+    return 17
+end
+
+local function railItem(label, key, x, y, w)
+    local active = (state.tab == key)
+    local id  = "tab_" .. key
+    local hov = (hoverId == id)
+    if active then
+        S(x, y, w, 30, COL.accent, R, math.min(OPA, 0.20))
+        S(x, y + 5, 3, 20, COL.accent, 2)
+    elseif hov then
+        S(x, y, w, 30, COL.panel, R)
+    end
+    T(label, x + 12, y + 7, 14, active and COL.accent or COL.dim)
+    rect(id, x, y, w, 30)
+    if clickedId == id then state.tab = key end
+    return 34
+end
+
+local function themeCell(i, x, y, w)
+    local t   = THEMES[i]
+    local act = (state.cfg.theme == i)
+    local id  = "th_" .. i
+    local hov = (hoverId == id)
+    S(x, y, w, 32, t.panel, R)
+    if act then SO(x, y, w, 32, t.accent, R, nil, 2)
+    elseif hov then SO(x, y, w, 32, COL.border, R) end
+    S(x + 8, y + 10, 12, 12, t.accent, 6)
+    S(x + 23, y + 13, 6, 6, t.accent2, 3)
+    T(t.name, x + 35, y + 8, 13, act and t.accent or t.text)
+    rect(id, x, y, w, 32)
+    if clickedId == id then
+        state.cfg.theme = i
+        applyTheme(i)
+    end
+    return 36
+end
+
+--======================================================================
+--  DRAW
+--======================================================================
+local function draw()
+    siUse, tiUse = 0, 0
+    hot = {}
+    local c = state.cfg
+    OPA = math.clamp(c.ui_opacity or 1, 0.35, 1)
+    R   = math.floor(c.ui_round or 6)
+
+    local mx, my = mouse.X, mouse.Y
+    mPrev = mDown
+    mDown = ismouse1pressed() and true or false
+    local justPressed = (mDown and not mPrev)
+
+    clickedId, hoverId = nil, nil
+    for id, r in pairs(prevHot) do
+        if inRect(r, mx, my) then
+            hoverId = id
+            if justPressed then clickedId = id end
+            break
+        end
+    end
+
+    local bodyH = minimized and 0 or (UH - HEAD)
+    local overWindow = mx >= UX and mx <= UX + UW and my >= UY and my <= UY + HEAD + bodyH
+    -- tell the aimbot's charge tracker to ignore presses that began on the
+    -- panel, or clicking a toggle would read as winding up a throw
+    if justPressed and overWindow then uiCapture = true end
+    if not mDown then uiCapture = false end
+
+    if clickedId == "min" then minimized = not minimized end
+    if clickedId == "cls" then
+        -- full teardown, not just a feature stop (the old X left the whole
+        -- overlay on screen with the loops dead)
+        task.spawn(function() if state.stop then pcall(state.stop) end end)
+        return
+    end
+
+    -- drag by the header, excluding the buttons
+    if justPressed and my >= UY and my <= UY + HEAD and mx >= UX and mx <= UX + UW - 64 then
+        dragging = true; dragOff.x = mx - UX; dragOff.y = my - UY
+    end
+    if not mDown then dragging = false end
+    if dragging then UX = mx - dragOff.x; UY = my - dragOff.y end
+
+    ------------------------------------------------------------------
+    -- shell: soft shadow, body, header gradient, rail
+    ------------------------------------------------------------------
+    local totalH = HEAD + bodyH
+    for i = 3, 1, -1 do
+        S(UX - i * 2, UY - i * 2 + 3, UW + i * 4, totalH + i * 4, COL.shadow, R + i * 2, 0.05 * i)
+    end
+    S(UX, UY, UW, totalH, COL.bg, R)
+    grad(UX, UY, UW, HEAD, COL.bar, COL.barTo, 10, R)
+
+    S(UX + 12, UY + 11, 4, 12, COL.accent, 2)
+    S(UX + 18, UY + 14, 4, 6,  COL.accent2, 2)
+    local ttl = T("VIOLENCE DISTRICT", UX + 30, UY + 4, 15, COL.text)
+    local twid = 150
+    if ttl then
+        local okb, b = pcall(function() return ttl.TextBounds end)
+        if okb and b then twid = b.X end
+    end
+    T("HUB", UX + 38 + twid, UY + 6, 12, COL.accent)
+
+    local mh, ch = (hoverId == "min"), (hoverId == "cls")
+    S(UX + UW - 56, UY + 8, 20, 18, mh and COL.panel or COL.bg2, R, mh and OPA or 0.6)
+    S(UX + UW - 51, UY + 20, 10, 2, COL.text, 1)
+    rect("min", UX + UW - 56, UY + 8, 20, 18)
+    S(UX + UW - 30, UY + 8, 20, 18, ch and COL.bad or COL.bg2, R, ch and OPA or 0.6)
+    T("x", UX + UW - 20, UY + 5, 15, ch and COL.knob or COL.bad, true)
+    rect("cls", UX + UW - 30, UY + 8, 20, 18)
+
+    if minimized then
+        for i = siUse + 1, #sq do sq[i].Visible = false end
+        for i = tiUse + 1, #tx do tx[i].Visible = false end
+        prevHot = hot
+        return
+    end
+
+    -- rail
+    S(UX, UY + HEAD, RAIL, bodyH, COL.bg2, 0, OPA)
+    S(UX + RAIL, UY + HEAD, 1, bodyH, COL.border)
+
+    local ry = UY + HEAD + 10
+    ry = ry + railItem("Pallet",     "pallet",   UX + 8, ry, RAIL - 16)
+    ry = ry + railItem("Skillcheck", "skill",    UX + 8, ry, RAIL - 16)
+    ry = ry + railItem("Vault",      "vault",    UX + 8, ry, RAIL - 16)
+    ry = ry + railItem("Veil Aim",   "veil",     UX + 8, ry, RAIL - 16)
+
+    -- settings sits apart at the foot of the rail: the "settings button"
+    local sy = UY + totalH - 42
+    S(UX + 8, sy - 10, RAIL - 16, 1, COL.border)
+    railItem("Settings", "settings", UX + 8, sy, RAIL - 16)
+
+    -- unsafe-memory banner: pallet is the only feature that does not need it
+    local unsafe = unsafeOn()
+    if not unsafe and state.tab ~= "pallet" and state.tab ~= "settings" then
+        T("Unsafe LuaU OFF", UX + 12, UY + totalH - 66, 11, COL.bad)
+    end
+
+    ------------------------------------------------------------------
+    -- content
+    ------------------------------------------------------------------
+    local pad    = UX + RAIL + 16
+    local innerW = UW - RAIL - 32
+    local y      = UY + HEAD + 14
+
+    if state.tab == "pallet" then
+        y = y + toggleRow("Auto Pallet", pad, y, innerW,
+            function() return c.p_enabled end,
+            function(v) c.p_enabled = v end)
+        y = y + 6
+        y = y + section("Stun box", pad, y, innerW)
+        y = y + stepper("Interact radius", pad, y, innerW,
+            function() return c.interactionRadius end,
+            function(v) c.interactionRadius = v end, 1, 30, 1, "%d")
+        y = y + stepper("Stun reach", pad, y, innerW,
+            function() return c.stunReach end,
+            function(v) c.stunReach = v end, 0, 15, 1, "%d")
+        y = y + stepper("Stun width", pad, y, innerW,
+            function() return c.stunWidth end,
+            function(v) c.stunWidth = v end, 0, 15, 1, "%d")
+        y = y + stepper("Stun height", pad, y, innerW,
+            function() return c.stunHeight end,
+            function(v) c.stunHeight = v end, 0, 15, 1, "%d")
+        y = y + 10
+        card(pad - 8, y, innerW + 16, 96)
+        local cy, cx, cw = y + 10, pad, innerW
+        cy = cy + statRight("Pallets tracked", tostring(#pallets), cx, cy, cw, COL.text)
+        cy = cy + statRight("Killer visible", #killerRoots > 0 and "YES" or "--", cx, cy, cw,
+                #killerRoots > 0 and COL.warn or COL.dim)
+        cy = cy + statRight("At a pallet", pStat.elig and "YES" or "--", cx, cy, cw,
+                pStat.elig and COL.on or COL.dim)
+        cy = cy + statRight("Stun zone", pStat.inZone and "FIRE" or "--", cx, cy, cw,
+                pStat.inZone and COL.warn or COL.dim)
+        cy = cy + statRight("Range  pallet / killer", ("%s / %s"):format(
+                pStat.nearD and ("%.1f"):format(pStat.nearD) or "--",
+                pStat.killD and ("%.1f"):format(pStat.killD) or "--"), cx, cy, cw, COL.dim)
+        y = y + 104
+        T(pStat.hp == false and "Health <= 50 -- the game blocks the drop" or "Key: SPACE",
+            pad, y, 11, pStat.hp == false and COL.bad or COL.dim)
+
+    elseif state.tab == "skill" then
+        y = y + toggleRow("Auto Skillcheck", pad, y, innerW,
+            function() return c.sc_enabled end,
+            function(v) c.sc_enabled = v end)
+        y = y + 6
+        y = y + section("Timing", pad, y, innerW)
+        y = y + stepper("Lead (deg)", pad, y, innerW,
+            function() return c.sc_lead end,
+            function(v) c.sc_lead = v end, 0, 10, 1, "%d")
+        y = y + 12
+        if not unsafe then
+            card(pad - 8, y, innerW + 16, 62)
+            T("Unsafe LuaU is disabled", pad, y + 10, 13, COL.bad)
+            T("Enable 'Allow Unsafe LuaU' in Matcha", pad, y + 28, 11, COL.warn)
+            T("settings to read the skillcheck needle.", pad, y + 42, 11, COL.warn)
+            y = y + 70
+        else
+            card(pad - 8, y, innerW + 16, 116)
+            local cy = y + 9
+            cy = cy + statRight("Line / Goal", ("%s / %s"):format(
+                    scLast.l and ("%.0f"):format(scLast.l) or "--",
+                    scLast.g and ("%.0f"):format(scLast.g) or "--"), pad, cy, innerW, COL.text)
+            cy = cy + statRight("Success window", tostring(scLast.win or "--"), pad, cy, innerW, COL.dim)
+            cy = cy + statRight("Checks / inputs", ("%d / %d"):format(scChecks, scHits),
+                    pad, cy, innerW, scHits > 0 and COL.on or COL.dim)
+            cy = cy + statRight("Missed windows", tostring(scStat.misses), pad, cy, innerW,
+                    scStat.misses > 0 and COL.warn or COL.dim)
+            cy = cy + statRight("Game binding", scStat.key, pad, cy, innerW, COL.text)
+            cy = cy + statRight("Prompt", scStat.offset and "VERIFIED" or "WAITING", pad, cy, innerW,
+                    scStat.offset and COL.on or COL.dim)
+            y = y + 124
+        end
+        T(scStat.status, pad, y, 11, scStat.error and COL.bad or COL.dim)
+        y = y + 18
+        T("Repair, healing and chained checks.", pad, y, 11, COL.dim)
+
+    elseif state.tab == "vault" then
+        y = y + toggleRow("Always Fast Vault", pad, y, innerW,
+            function() return c.fv_enabled end,
+            function(v) c.fv_enabled = v end)
+        y = y + 6
+        y = y + section("Approach", pad, y, innerW)
+        T("Sprint at a window from any angle.", pad, y, 12, COL.text)
+        y = y + 18
+        T("Short run-ups and repeat vaults are handled.", pad, y, 11, COL.dim)
+        y = y + 18
+        T("Sprinting and normal movement are required.", pad, y, 11, COL.dim)
+        y = y + 26
+        card(pad - 8, y, innerW + 16, 98)
+        local cy = y + 9
+        cy = cy + statRight("Windows tracked", tostring(#vaults), pad, cy, innerW, COL.text)
+        cy = cy + statRight("Assist active", fvStat.holding and "YES" or "--", pad, cy, innerW,
+                fvStat.holding and COL.on or COL.dim)
+        cy = cy + statRight("Vaults / fast", ("%d / %d"):format(fvStat.vaults, fvStat.fast),
+                pad, cy, innerW, fvStat.fast > 0 and COL.on or COL.dim)
+        cy = cy + statRight("Last tier", fvStat.tier or "--", pad, cy, innerW,
+                fvStat.tier == "fast" and COL.on or COL.dim)
+        cy = cy + statRight("Game reason", fvStat.reason or "--", pad, cy, innerW, COL.dim)
+        y = y + 106
+        T(fvStat.status, pad, y, 11, fvStat.error and COL.warn or COL.dim)
+        y = y + 18
+        T("Switching off restores the normal vault rules.", pad, y, 11, COL.dim)
+
+    elseif state.tab == "veil" then
+        y = y + toggleRow("Veil Spear Aimbot", pad, y, innerW,
+            function() return c.va_enabled end,
+            function(v) c.va_enabled = v end)
+        y = y + 4
+        y = y + section("Targeting", pad, y, innerW)
+        y = y + stepper("FOV", pad, y, innerW,
+            function() return c.va_fov end,
+            function(v) c.va_fov = v end, 5, 90, 5, "%d deg")
+        y = y + stepper("Range", pad, y, innerW,
+            function() return c.va_range end,
+            function(v) c.va_range = v end, 40, 400, 20, "%d")
+        y = y + stepper("Smoothing", pad, y, innerW,
+            function() return c.va_smooth end,
+            function(v) c.va_smooth = math.floor(v + 0.5) end,
+            1, 20, 1, "%d")
+        y = y + 6
+        local hw = innerW / 2 - 4
+        chip("Lead target",  pad,          y, hw, function() return c.va_lead end,      function(v) c.va_lead = v end)
+        chip("Euler fix",    pad + hw + 8, y, hw, function() return c.va_euler end,     function(v) c.va_euler = v end)
+        y = y + 28
+        -- Matcha has no working raycast (see vaRayUsable), so name the chip after
+        -- what it can actually do instead of leaving a dead filter looking live.
+        local losLbl = (vaStat.losOK == false) and "LOS: n/a here" or "Line of sight"
+        chip(losLbl,          pad,          y, hw, function() return c.va_los end,      function(v) c.va_los = v end)
+        chip("Auto-cal",      pad + hw + 8, y, hw, function() return c.va_autocal end,  function(v) c.va_autocal = v end)
+        y = y + 28
+        chip("Charge only",  pad,          y, hw, function() return c.va_holdOnly end,  function(v) c.va_holdOnly = v end)
+        chip("Cam origin",   pad + hw + 8, y, hw, function() return c.va_originCam end, function(v) c.va_originCam = v end)
+        y = y + 28
+        -- full width: this is the headline targeting behaviour, so give it the row
+        chip("Sticky aim (hold target)", pad, y, innerW,
+            function() return c.va_sticky end, function(v) c.va_sticky = v end)
+        y = y + 34
+
+        card(pad - 8, y, innerW + 16, 112)
+        local cy = y + 9
+        cy = cy + statRight("Target",
+                (vaStat.target or "--") .. (vaStat.held and "   LOCK" or ""),
+                pad, cy, innerW,
+                vaStat.held and COL.accent or (vaStat.target and COL.on or COL.dim))
+        cy = cy + statRight("Distance", vaStat.dist and ("%.0f"):format(vaStat.dist) or "--",
+                pad, cy, innerW, COL.text)
+        cy = cy + statRight("Charge", ("%.2fs  %s"):format(vaStat.hold or 0,
+                vaStat.tier or "--"), pad, cy, innerW,
+                (vaStat.tier == "CHARGED") and COL.warn or COL.text)
+        cy = cy + statRight("Launch speed", vaStat.speed and ("%.1f"):format(vaStat.speed) or "--",
+                pad, cy, innerW, COL.text)
+        cy = cy + statRight("Flight / drop", ("%s / %s"):format(
+                vaStat.flight and ("%.2fs"):format(vaStat.flight) or "--",
+                vaStat.drop   and ("%.1f"):format(vaStat.drop)    or "--"),
+                pad, cy, innerW, COL.dim)
+        cy = cy + statRight("GMult", vaStat.gmult
+                and ("%.3f  (%d arcs)"):format(c.va_gmult or 1, vaStat.measN or 0)
+                or ("%.3f  (default)"):format(c.va_gmult or 1),
+                pad, cy, innerW, vaStat.gmult and COL.on or COL.warn)
+        y = y + 120
+
+        if vaStat.cd and vaStat.cd > 0.5 then
+            T(("Charged throw on cooldown: %.0fs"):format(vaStat.cd), pad, y, 11, COL.warn)
+        elseif not vaStat.addr and c.va_enabled then
+            T("Resolving camera address...", pad, y, 11, COL.warn)
+        elseif vaStat.solved then
+            T("Solution locked -- release to throw.", pad, y, 11, COL.on)
+        else
+            T("Hold attack with a spear equipped to aim.", pad, y, 11, COL.dim)
+        end
+
+    else  -- settings
+        y = y + section("Theme", pad, y, innerW)
+        local hw = innerW / 2 - 4
+        for i = 1, #THEMES do
+            local col = (i - 1) % 2
+            local row = math.floor((i - 1) / 2)
+            themeCell(i, pad + col * (hw + 8), y + row * 36, hw)
+        end
+        y = y + math.ceil(#THEMES / 2) * 36 + 8
+        y = y + section("Panel", pad, y, innerW)
+        y = y + stepper("Opacity", pad, y, innerW,
+            function() return c.ui_opacity end,
+            function(v) c.ui_opacity = math.floor(v * 20 + 0.5) / 20 end,
+            0.35, 1, 0.05, "%.2f")
+        y = y + stepper("Corner radius", pad, y, innerW,
+            function() return c.ui_round end,
+            function(v) c.ui_round = v end, 0, 14, 2, "%d px")
+        y = y + 12
+        T("Settings are not persisted -- a reload resets", pad, y, 11, COL.dim); y = y + 14
+        T("every toggle on every tab.", pad, y, 11, COL.dim); y = y + 18
+        T("Stop the hub:  _G.vdHub.stop()", pad, y, 11, COL.accent)
+    end
+
+    for i = siUse + 1, #sq do sq[i].Visible = false end
+    for i = tiUse + 1, #tx do tx[i].Visible = false end
+    prevHot = hot
+end
+
+
+local renderConn
+renderConn = RunService.RenderStepped:Connect(draw)
+
+--======================================================================
+--  STOP
+--======================================================================
+state.stop = function()
+    state.running = false
+    scReleaseInput()
+    local restored = fvRestore()
+    if renderConn then renderConn:Disconnect() end
+    for i=1,#sq do pcall(function() sq[i]:Remove() end) end
+    for i=1,#tx do pcall(function() tx[i]:Remove() end) end
+    if restored then
+        if _G.vdHub == state then _G.vdHub = nil end
+    else
+        warn("[vdHub] Vault restore pending. Enable Unsafe LuaU, then call _G.vdHub.stop() again.")
+    end
+    return restored
+end
+
+-- live introspection (pallets is REBOUND on every scan, so this must be a
+-- function -- holding a reference to the table would go stale each round)
+state.debug = function()
+    return {
+        pallets     = #pallets,
+        blockers    = #blockers,
+        killerRoots = #killerRoots,
+        stat        = pStat,
+        scHits      = scHits,
+        scChecks    = scChecks,
+        scLine      = scLast.l,
+        scGoal      = scLast.g,
+        scWin       = scLast.win,
+        skill       = scStat,
+        version     = state.version,
+        vaults      = #vaults,
+        fv          = fvStat,
+        veil        = vaStat,
+        camAddr     = vaRot,
+        baseG       = vaBaseG(),
+        theme       = (THEMES[state.cfg.theme] or {}).name,
+    }
+end
+
+-- force a fresh camera-offset resolve (after a respawn or a Roblox update)
+state.veilRecal = function()
+    vaRot, vaRotFor, vaWarmAt = nil, nil, 0
+    return vaRotAddr()
+end
+
+-- Portability report, for when this script is running on someone else's
+-- executor and the UI looks wrong. "Text invisible but the panel draws" is
+-- almost always one of the first two lines: no ZIndex support (so the fills
+-- win the tie) or a font index this build does not define. Run it there and
+-- send back what it prints.
+state.uiDiag = function()
+    print("---- vdHub UI diagnostic ----")
+    print(("ZIndex writable : %s   (false = draw order is up to the executor)")
+        :format(tostring(Z_OK)))
+    print(("Font in use     : %d (%s)  resolved by name, not index")
+        :format(FONT, FONTNAME))
+    local fonts = Drawing.Fonts
+    if type(fonts) == "table" then
+        local parts = {}
+        for k, v in pairs(fonts) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
+        table.sort(parts)
+        print("Drawing.Fonts   : " .. table.concat(parts, ", "))
+    else
+        print("Drawing.Fonts   : " .. type(fonts) .. " (not a table)")
+    end
+    print(("pools           : %d squares, %d texts"):format(#sq, #tx))
+    local t = tx[1]
+    if t then
+        local okB, b = pcall(function() return t.TextBounds end)
+        print(("TextBounds      : %s  (false breaks right-aligned values)")
+            :format(okB and tostring(b) or "unsupported"))
+        local okT, tv = pcall(function() return t.Transparency end)
+        print(("Text.Transparency reads back: %s  (expect 1 = opaque)")
+            :format(okT and tostring(tv) or "unsupported"))
+        local okZ, zv = pcall(function() return t.ZIndex end)
+        print(("Text[1].ZIndex  : %s  (expect %d)")
+            :format(okZ and tostring(zv) or "unsupported", Z_TEXT + 1))
+    end
+    -- the whole point of the fix: every text must outrank every square
+    local function zOf(o)
+        if not o then return "nil" end
+        local k, v = pcall(function() return o.ZIndex end)
+        return k and tostring(v) or "unsupported"
+    end
+    print(("layering        : squares %s..%s   texts %s..%s")
+        :format(zOf(sq[1]), zOf(sq[#sq]), zOf(tx[1]), zOf(tx[#tx])))
+    print(("panel           : %d,%d  %dx%d   theme=%d  opacity=%.2f")
+        :format(UX, UY, UW, UH, state.cfg.theme or 1, state.cfg.ui_opacity or 1))
+    print("-----------------------------")
+    return { zindex = Z_OK, font = FONT, squares = #sq, texts = #tx }
+end
+
+-- theme control from the console as well as the Settings tab
+state.themes = function()
+    local out = {}
+    for i, t in ipairs(THEMES) do out[i] = t.name end
+    return out
+end
+
+state.setTheme = function(i)
+    if type(i) == "string" then
+        for j, t in ipairs(THEMES) do
+            if t.name:lower() == i:lower() then i = j break end
+        end
+    end
+    if not THEMES[i] then return nil end
+    state.cfg.theme = i
+    applyTheme(i)
+    return THEMES[i].name
+end
+
+notify("Violence District Hub", "Loaded. No calibration needed.", 4)
+print("[vdHub] loaded -- stop with _G.vdHub.stop()")
