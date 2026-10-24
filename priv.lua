@@ -1,3 +1,5 @@
+--all comments made by claude some code is also made by claude. I dont remove the comments they make the code easier to read. cya
+
 --======================================================================
 --  VIOLENCE DISTRICT HUB   (Matcha / Drawing UI)
 --  Tabs: Auto Pallet | Auto Skillcheck | Fast Vault | Veil Aim | Settings
