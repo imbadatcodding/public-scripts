@@ -1,13 +1,19 @@
---all comments made by claude some code is also made by claude. I dont remove the comments they make the code easier to read. cya
+--comments made by claude otherwise claude will lose its shit and use 10B tokens.
 
 --======================================================================
 --  VIOLENCE DISTRICT HUB   (Matcha / Drawing UI)
---  Tabs: Auto Pallet | Auto Skillcheck | Fast Vault | Veil Aim | Settings
+--  Tabs: Main (all features & collection) | Characters
+--  Inventory is a local catalog. It does not grant server ownership.
 --  No calibration. Skillcheck rotation offset is derived from the
 --  AbsolutePosition binding at read time -- zero setup. The Veil aimbot
 --  measures the projectile's gravity multiplier off your own throws.
 --  Stop with:  _G.vdHub.stop()
 --======================================================================
+-- Resolve JDUI before stopping the existing hub, so download failure is recoverable.
+local jdOK,jdSource=pcall(function() return game:HttpGet("https://raw.githubusercontent.com/jdev-studio/jdui/refs/heads/main/JDUI") end)
+assert(jdOK and type(jdSource)=="string","Unable to download JDUI: "..tostring(jdSource))
+local jdFactory,jdError=loadstring(jdSource)
+assert(jdFactory,jdError)
 local previousHub = _G.vdHub
 local vaultCacheSeed = previousHub and previousHub._vaultCache
 if previousHub and previousHub.stop then
@@ -29,8 +35,8 @@ local mouse       = lp:GetMouse()
 --======================================================================
 local state = {
     running = true,
-    version = "2026-10-24.2",
-    tab     = "pallet",
+    version = "2026-10-26.2-jdui",
+    tab     = "main",
     cfg = {
         -- auto pallet
         p_enabled        = false,
@@ -116,7 +122,9 @@ local state = {
         -- ui
         theme            = 1,
         ui_opacity       = 1,
-        ui_round         = 6,
+        ui_round         = 12,
+        ui_scale         = 1,
+        ui_motion        = true,
     },
 }
 _G.vdHub = state
@@ -802,8 +810,30 @@ local FV_PATCH = { DISTANCE = 0, REPEAT_DISTANCE = 0, DOT = -1, MIN_SPEED = -1 }
 local FV_KEYS = { "DISTANCE", "REPEAT_DISTANCE", "DOT", "MIN_SPEED" }
 local fvStat = { status = "Disabled", ready = false, holding = false, vaults = 0, fast = 0, scans = 0 }
 local fvCache, fvResolving, fvAttemptedFor = nil, false, nil
+local fvResolveGeneration, fvNextResolveAt, fvRetryDelay = 0, 0, 5
+local fvEnabled = state.cfg.fv_enabled
 local fvFault = nil
 local fvCharId, fvLastCount = nil, nil
+
+local function fvCancelResolve()
+    fvResolveGeneration = fvResolveGeneration + 1
+    fvAttemptedFor, fvNextResolveAt, fvRetryDelay = nil, 0, 5
+    -- Keep the in-flight flag until its worker exits; scans must not overlap.
+end
+
+local function fvSetEnabled(enabled)
+    state.cfg.fv_enabled = enabled
+    if fvEnabled ~= enabled then
+        fvEnabled = enabled
+        fvCancelResolve()
+        fvStat.error = nil
+    end
+end
+
+local function fvSurvivorReady()
+    local team = lp.Team
+    return not team or team.Name == "Survivors"
+end
 
 local function fvSame(a, b)
     return scFinite(a) and type(b) == "number" and math.abs(a - b) <= math.max(1, math.abs(b)) * 0.000001
@@ -902,13 +932,27 @@ local function fvApply()
 end
 
 local function fvResolve(characterId)
-    if fvResolving or fvAttemptedFor == characterId then return end
+    if fvResolving then
+        fvStat.status = "Resolving vault module"
+        return
+    end
+    if fvAttemptedFor == characterId and tick() < fvNextResolveAt then
+        fvStat.status = "Waiting for survivor module"
+        return
+    end
     fvResolving, fvAttemptedFor = true, characterId
+    local generation, job = fvResolveGeneration, game.JobId
+    local function current()
+        local ch = lp.Character
+        return state.running and state.cfg.fv_enabled
+            and generation == fvResolveGeneration and game.JobId == job
+            and ch and ch.Address == characterId and fvSurvivorReady() and unsafeOn()
+    end
     fvStat.status = "Resolving vault module"
     task.spawn(function()
         task.wait(0.35)
-        if not state.running or not state.cfg.fv_enabled then
-            fvResolving, fvAttemptedFor = false, nil
+        if not current() then
+            fvResolving = false
             return
         end
         local ok, cache, err = pcall(function()
@@ -917,8 +961,8 @@ local function fvResolve(characterId)
                 vaultCacheSeed = nil
                 if reused then return reused end
             end
-            -- A scan is done only on first enable, or after a failed resolve
-            -- and a new character. A healthy cache survives ordinary respawns.
+            -- Retry only unresolved modules, with backoff after each miss.
+            -- A healthy cache survives toggles and ordinary respawns.
             fvStat.scans = fvStat.scans + 1
             local rows = findgc("REPEAT_WINDOW_TIME", {
                 DISTANCE="number", REPEAT_DISTANCE="number", DOT="number",
@@ -927,11 +971,13 @@ local function fvResolve(characterId)
             return fvBuildCache(rows)
         end)
         fvResolving = false
-        if not state.running then return end
+        if not current() then return end
         if ok and cache then
             fvCache, state._vaultCache = cache, cache
             fvStat.ready, fvStat.error = true, nil
         else
+            fvNextResolveAt = tick() + fvRetryDelay
+            fvRetryDelay = math.min(fvRetryDelay * 2, 30)
             fvStat.error = tostring(ok and err or cache)
             fvStat.status = "Waiting for survivor module"
         end
@@ -942,6 +988,7 @@ local function fvObserveVault()
     local ch = lp.Character
     local id = ch and ch.Address
     if id ~= fvCharId then
+        fvCancelResolve()
         fvCharId, fvLastCount = id, nil
         fvStat.tier, fvStat.reason = nil, nil
     end
@@ -965,6 +1012,7 @@ task.spawn(function()
     while state.running do
         local ok, err = pcall(function()
             local id = fvObserveVault()
+            fvSetEnabled(state.cfg.fv_enabled)
             if not state.cfg.fv_enabled then
                 local restored = fvRestore()
                 if restored then fvFault = nil end
@@ -972,7 +1020,13 @@ task.spawn(function()
             elseif not unsafeOn() then
                 fvStat.status = fvHasWrites() and "Restore pending: enable Unsafe LuaU" or "Enable Unsafe LuaU"
             elseif not fvCache then
-                if id then fvResolve(id) else fvStat.status = "Waiting for character" end
+                if not id then
+                    fvStat.status = "Waiting for character"
+                elseif not fvSurvivorReady() then
+                    fvStat.status = "Waiting for survivor module"
+                else
+                    fvResolve(id)
+                end
             elseif fvFault then
                 fvStat.status = fvFault
             else
@@ -1524,643 +1578,305 @@ task.spawn(function()
 end)
 
 --======================================================================
---  UI  (Drawing immediate-mode)
+--  LOCAL INVENTORY CATALOG
+--  Read catalog assets once, on request. Never infer ownership from a
+--  Matcha InvokeServer return: Hybrid reports dispatch, not the response.
 --======================================================================
-local UX, UY    = 60, 120
-local UW, UH    = 448, 412
-local RAIL      = 118            -- left nav column
-local HEAD      = 34             -- title bar height
-local minimized = false
-
---======================================================================
---  THEMES
---  Every palette carries the same key set, and applyTheme copies into the
---  SAME COL table rather than rebinding it -- so every widget below keeps
---  its existing upvalue and the switch is instant with no relayout.
---======================================================================
-local function C(r, g, b) return Color3.fromRGB(r, g, b) end
-
-local THEMES = {
-    { name = "Midnight",
-      bg=C(16,16,24),   bg2=C(23,23,34),  bar=C(40,29,78),  barTo=C(19,17,38),
-      panel=C(29,29,44), border=C(52,47,82), accent=C(134,104,255), accent2=C(96,204,255),
-      on=C(94,214,142), off=C(70,70,92),  text=C(237,237,249), dim=C(145,145,176),
-      warn=C(246,188,94), bad=C(238,102,110), shadow=C(0,0,0), knob=C(247,247,253) },
-
-    { name = "Ember",
-      bg=C(20,14,12),   bg2=C(28,20,17),  bar=C(84,32,16),  barTo=C(36,17,11),
-      panel=C(35,24,20), border=C(78,49,37), accent=C(255,132,54), accent2=C(255,198,84),
-      on=C(232,148,54), off=C(84,62,54),  text=C(251,239,231), dim=C(178,148,133),
-      warn=C(255,206,110), bad=C(240,86,72), shadow=C(0,0,0), knob=C(253,246,240) },
-
-    { name = "Toxic",
-      bg=C(12,20,14),   bg2=C(17,28,20),  bar=C(24,72,38),  barTo=C(12,32,19),
-      panel=C(21,35,25), border=C(42,76,50), accent=C(124,242,120), accent2=C(204,255,118),
-      on=C(124,242,120), off=C(58,82,64),  text=C(233,251,235), dim=C(137,177,145),
-      warn=C(232,232,110), bad=C(246,110,96), shadow=C(0,0,0), knob=C(244,253,244) },
-
-    { name = "Abyss",
-      bg=C(10,16,26),   bg2=C(15,23,36),  bar=C(16,54,90),  barTo=C(10,24,44),
-      panel=C(19,29,45), border=C(35,62,93), accent=C(86,196,255), accent2=C(128,240,220),
-      on=C(88,214,178), off=C(55,74,98),  text=C(231,243,255), dim=C(131,158,190),
-      warn=C(246,198,104), bad=C(240,104,124), shadow=C(0,0,0), knob=C(240,250,255) },
-
-    { name = "Rosewood",
-      bg=C(22,12,20),   bg2=C(30,17,28),  bar=C(84,24,60),  barTo=C(38,13,29),
-      panel=C(37,21,33), border=C(77,42,66), accent=C(255,110,180), accent2=C(255,172,212),
-      on=C(226,122,190), off=C(83,56,74),  text=C(253,235,247), dim=C(185,141,169),
-      warn=C(250,196,120), bad=C(246,92,110), shadow=C(0,0,0), knob=C(254,244,250) },
-
-    { name = "Paper",
-      bg=C(239,239,246), bg2=C(250,250,253), bar=C(228,228,240), barTo=C(207,207,226),
-      panel=C(227,227,239), border=C(198,198,216), accent=C(88,70,220), accent2=C(24,148,198),
-      on=C(38,158,88),  off=C(174,174,192), text=C(27,27,40),  dim=C(108,108,130),
-      warn=C(176,118,20), bad=C(198,48,58), shadow=C(118,118,142), knob=C(255,255,255) },
+local inventory = {
+    categories = {
+        { key = "killers", label = "Killers" },
+        { key = "items", label = "Items" },
+        { key = "emotes", label = "Emotes" },
+        { key = "skins", label = "Killer skins" },
+        { key = "itemskins", label = "Item skins" },
+    },
+    category = 1, owner = 1, page = 1, pageSize = 6,
+    catalog = {}, rows = {}, owners = { "All" }, total = 0,
+    loaded = false, attempted = false, busy = false,
 }
+state.inventory = inventory
 
-local COL = {}
--- Copy into the SAME table (never rebind) so every widget's upvalue stays
--- valid, and fall back to Midnight for any key a palette forgets -- a nil
--- Color3 would otherwise throw mid-frame and blank the whole overlay.
-local function applyTheme(i)
-    local base = THEMES[1]
-    local t = THEMES[i] or base
-    for k, v in pairs(base) do COL[k] = t[k] or v end
-end
-applyTheme(state.cfg.theme)
-
-local function lerpC(a, b, t)
-    return Color3.fromRGB(
-        math.floor(a.R * 255 + (b.R * 255 - a.R * 255) * t + 0.5),
-        math.floor(a.G * 255 + (b.G * 255 - a.G * 255) * t + 0.5),
-        math.floor(a.B * 255 + (b.B * 255 - a.B * 255) * t + 0.5))
+function inventory.filter()
+    local category = inventory.categories[inventory.category]
+    local list = inventory.catalog[category.key] or {}
+    local owner = inventory.owners[inventory.owner] or "All"
+    local rows = {}
+    for _, entry in ipairs(list) do
+        if owner == "All" or entry.owner == owner then rows[#rows + 1] = entry end
+    end
+    inventory.rows = rows
+    inventory.page = 1
+    inventory.selected = nil
 end
 
---======================================================================
---  DRAW POOLS
---  The old pools were a hard 64/64 and S()/T() silently returned nil once
---  exhausted -- a richer layout would just stop rendering halfway with no
---  error. They now grow on demand instead, so the layout can never be
---  truncated by its own budget.
---======================================================================
--- Draw order here was implicit, and therefore not portable. Nothing in this file
--- ever set ZIndex, so all 200 squares and all 96 texts tied at 0 and each
--- executor was free to sort that tie however it liked. On this machine the text
--- happened to win; on a shared copy the panel fills painted straight over it and
--- the UI came out with no readable text at all. So layer it explicitly: squares
--- in paint order, every text above every square. No tiebreak left to lose.
---
--- Font INDICES are not portable, so don't hardcode one. Index 2 is SystemBold in
--- Matcha but Plex on Synapse-style builds, and Matcha's table (UI=0, System=1,
--- SystemBold=2, Minecraft=4, Monospace=5, Pixel=7, Fortnite=8,
--- ProximaSoftBold=11) looks nothing like the standard four. An index this build
--- doesn't define can render nothing while squares still draw -- which from the
--- outside is indistinguishable from the ZIndex bug above. So resolve by NAME
--- down a preference list and end at 0 (UI), which every build defines.
-local Z_TEXT   = 4096
-local FONT     = 0
-local FONTNAME = "UI(default 0)"
-do
-    local fonts = Drawing.Fonts
-    if type(fonts) == "table" then
-        for _, name in ipairs({ "SystemBold", "System", "UI" }) do
-            local v = fonts[name]
-            if type(v) == "number" then FONT, FONTNAME = v, name break end
+function inventory.setCategory(index)
+    index = math.clamp(math.floor(tonumber(index) or 1), 1, #inventory.categories)
+    inventory.category = index
+    inventory.owner = 1
+    local list = inventory.catalog[inventory.categories[index].key] or {}
+    local seen, owners = {}, {}
+    for _, entry in ipairs(list) do
+        if entry.owner and not seen[entry.owner] then
+            seen[entry.owner] = true
+            owners[#owners + 1] = entry.owner
         end
     end
+    table.sort(owners)
+    table.insert(owners, 1, "All")
+    inventory.owners = owners
+    inventory.filter()
 end
 
-local sq, tx = {}, {}
-local Z_OK = false
-local function newSquare(i)
-    local s = Drawing.new("Square")
-    s.Filled = true
-    s.Visible = false
-    if Z_OK then pcall(function() s.ZIndex = i end) end
-    return s
-end
-local function newText(i)
-    local t = Drawing.new("Text")
-    t.Size = 14
-    t.Font = FONT
-    t.Visible = false
-    if Z_OK then pcall(function() t.ZIndex = Z_TEXT + i end) end
-    return t
-end
--- Probe ZIndex support on the first real pool object, not a throwaway: a Drawing
--- whose last reference is lost stays on screen for the life of the VM.
-sq[1] = newSquare(1)
-Z_OK  = pcall(function() sq[1].ZIndex = 1 end)
-for i = 2, 200 do sq[i] = newSquare(i) end
-for i = 1, 96  do tx[i] = newText(i)   end
-
-local siUse, tiUse = 0, 0
-local OPA = 1
-
--- filled rect (round = corner radius in px)
-local function S(x, y, w, h, color, round, trans)
-    siUse = siUse + 1
-    local o = sq[siUse]
-    if not o then o = newSquare(siUse); sq[siUse] = o end
-    o.Position = Vector2.new(x, y); o.Size = Vector2.new(w, h)
-    o.Color = color; o.Filled = true; o.Thickness = 1
-    o.Rounding = round or 0
-    o.Transparency = trans or OPA
-    o.Visible = true
-    return o
+function inventory.setOwner(index)
+    inventory.owner = math.clamp(math.floor(tonumber(index) or 1), 1, #inventory.owners)
+    inventory.filter()
 end
 
--- outline rect
-local function SO(x, y, w, h, color, round, trans, thick)
-    siUse = siUse + 1
-    local o = sq[siUse]
-    if not o then o = newSquare(siUse); sq[siUse] = o end
-    o.Position = Vector2.new(x, y); o.Size = Vector2.new(w, h)
-    o.Color = color; o.Filled = false; o.Thickness = thick or 1
-    o.Rounding = round or 0
-    o.Transparency = trans or OPA
-    o.Visible = true
-    return o
+function inventory.setPage(page)
+    local pages = math.max(1, math.ceil(#inventory.rows / inventory.pageSize))
+    inventory.page = math.clamp(math.floor(tonumber(page) or 1), 1, pages)
 end
 
-local function T(str, x, y, size, color, center, trans)
-    tiUse = tiUse + 1
-    local o = tx[tiUse]
-    if not o then o = newText(tiUse); tx[tiUse] = o end
-    o.Text = str; o.Position = Vector2.new(x, y); o.Size = size or 14
-    o.Color = color or COL.text; o.Center = center or false
-    o.Transparency = trans or OPA
-    o.Visible = true
-    return o
-end
-
--- vertical gradient in n bands (cheaper than per-pixel and smooth enough
--- at header scale)
-local function grad(x, y, w, h, c1, c2, n, round)
-    n = n or 12
-    local bh = h / n
-    for i = 0, n - 1 do
-        local c = lerpC(c1, c2, i / (n - 1))
-        S(x, y + i * bh, w, bh + 1, c, (i == 0 or i == n - 1) and round or 0)
-    end
-end
-
---======================================================================
---  INPUT  (immediate mode: this frame's click resolves against LAST
---  frame's rects, which are laid out identically)
---======================================================================
-local mDown, mPrev = false, false
-local hot, prevHot = {}, {}
-local function rect(id, x, y, w, h) hot[id] = {x=x, y=y, w=w, h=h} end
-local function inRect(r, mx, my) return mx>=r.x and mx<=r.x+r.w and my>=r.y and my<=r.y+r.h end
-local clickedId = nil
-local hoverId   = nil
-local dragging, dragOff = false, {x=0, y=0}
-
---======================================================================
---  WIDGETS
---======================================================================
-local R = 6      -- refreshed from cfg each frame
-
-local function section(label, x, y, w)
-    T(label:upper(), x, y, 11, COL.dim)
-    S(x, y + 15, w, 1, COL.border)
-    return 22
-end
-
-local function card(x, y, w, h)
-    S(x, y, w, h, COL.bg2, R)
-    SO(x, y, w, h, COL.border, R)
-end
-
-local function toggleRow(label, x, y, w, get, set)
-    local id  = "tg_" .. label
-    local on  = get()
-    local hov = (hoverId == id)
-    S(x - 6, y - 3, w + 12, 28, hov and COL.panel or COL.bg2, R, hov and OPA or math.min(OPA, 0.55))
-    T(label, x, y + 3, 14, on and COL.text or COL.dim)
-    local tw, th = 40, 20
-    local tx0 = x + w - tw
-    S(tx0, y + 1, tw, th, on and COL.accent or COL.off, th / 2)
-    if on then SO(tx0 - 2, y - 1, tw + 4, th + 4, COL.accent, (th + 4) / 2, 0.35) end
-    S(on and (tx0 + tw - 18) or (tx0 + 2), y + 3, 16, 16, COL.knob, 8)
-    rect(id, x - 6, y - 3, w + 12, 28)
-    if clickedId == id then set(not on) end
-    return 32
-end
-
--- compact 2-per-row on/off pill, for the secondary switches
-local function chip(label, x, y, w, get, set)
-    local id  = "cp_" .. label
-    local on  = get()
-    local hov = (hoverId == id)
-    S(x, y, w, 24, on and COL.accent or COL.panel, R, on and OPA or math.min(OPA, 0.8))
-    if hov then SO(x, y, w, 24, on and COL.accent2 or COL.border, R) end
-    S(x + 8, y + 8, 8, 8, on and COL.knob or COL.off, 4)
-    T(label, x + 22, y + 4, 12, on and COL.knob or COL.dim)
-    rect(id, x, y, w, 24)
-    if clickedId == id then set(not on) end
-    return 28
-end
-
-local function stepper(label, x, y, w, get, set, lo, hi, step, fmt)
-    local val = get()
-    T(label, x, y + 4, 13, COL.dim)
-    local bw = 24
-    local mx0 = x + w - bw * 2 - 4
-    local px0 = x + w - bw
-    -- value sits in its own well so the number is readable at any theme
-    S(mx0 - 70, y, 66, 22, COL.panel, R)
-    T((fmt or "%s"):format(val), mx0 - 37, y + 3, 13, COL.text, true)
-    local hm, hp = (hoverId == "minus_" .. label), (hoverId == "plus_" .. label)
-    S(mx0, y, bw, 22, hm and COL.accent or COL.panel, R)
-    T("-", mx0 + bw / 2, y + 1, 16, hm and COL.knob or COL.text, true)
-    S(px0, y, bw, 22, hp and COL.accent or COL.panel, R)
-    T("+", px0 + bw / 2, y + 1, 16, hp and COL.knob or COL.text, true)
-    rect("minus_" .. label, mx0, y, bw, 22)
-    rect("plus_"  .. label, px0, y, bw, 22)
-    if clickedId == "minus_" .. label then set(math.max(lo, val - step)) end
-    if clickedId == "plus_"  .. label then set(math.min(hi, val + step)) end
-    return 26
-end
-
--- label left, value hard right. Drawing has no right-align, but Text.TextBounds
--- is readable and updates with the string, so the value is measured and then
--- repositioned -- otherwise long values ("0.659s / 42.6") run off the card.
-local function statRight(label, value, x, y, w, col)
-    T(label, x, y, 12, COL.dim)
-    local o = T(value, x, y, 12, col or COL.text)
-    if o then
-        local bw = 0
-        local okb, b = pcall(function() return o.TextBounds end)
-        if okb and b then bw = b.X end
-        o.Position = Vector2.new(x + w - bw, y)
-    end
-    return 17
-end
-
-local function railItem(label, key, x, y, w)
-    local active = (state.tab == key)
-    local id  = "tab_" .. key
-    local hov = (hoverId == id)
-    if active then
-        S(x, y, w, 30, COL.accent, R, math.min(OPA, 0.20))
-        S(x, y + 5, 3, 20, COL.accent, 2)
-    elseif hov then
-        S(x, y, w, 30, COL.panel, R)
-    end
-    T(label, x + 12, y + 7, 14, active and COL.accent or COL.dim)
-    rect(id, x, y, w, 30)
-    if clickedId == id then state.tab = key end
-    return 34
-end
-
-local function themeCell(i, x, y, w)
-    local t   = THEMES[i]
-    local act = (state.cfg.theme == i)
-    local id  = "th_" .. i
-    local hov = (hoverId == id)
-    S(x, y, w, 32, t.panel, R)
-    if act then SO(x, y, w, 32, t.accent, R, nil, 2)
-    elseif hov then SO(x, y, w, 32, COL.border, R) end
-    S(x + 8, y + 10, 12, 12, t.accent, 6)
-    S(x + 23, y + 13, 6, 6, t.accent2, 3)
-    T(t.name, x + 35, y + 8, 13, act and t.accent or t.text)
-    rect(id, x, y, w, 32)
-    if clickedId == id then
-        state.cfg.theme = i
-        applyTheme(i)
-    end
-    return 36
-end
-
---======================================================================
---  DRAW
---======================================================================
-local function draw()
-    siUse, tiUse = 0, 0
-    hot = {}
-    local c = state.cfg
-    OPA = math.clamp(c.ui_opacity or 1, 0.35, 1)
-    R   = math.floor(c.ui_round or 6)
-
-    local mx, my = mouse.X, mouse.Y
-    mPrev = mDown
-    mDown = ismouse1pressed() and true or false
-    local justPressed = (mDown and not mPrev)
-
-    clickedId, hoverId = nil, nil
-    for id, r in pairs(prevHot) do
-        if inRect(r, mx, my) then
-            hoverId = id
-            if justPressed then clickedId = id end
-            break
+function inventory.refresh()
+    if inventory.busy or not state.running then return false end
+    inventory.busy, inventory.attempted, inventory.error = true, true, nil
+    task.spawn(function()
+        local ok, catalog = pcall(function()
+            local rs = game:GetService("ReplicatedStorage")
+            local killers = rs:FindFirstChild("Killers")
+            local items = rs:FindFirstChild("Items")
+            local emotes = rs:FindFirstChild("Emotes")
+            if not killers or not items or not emotes then error("Catalog assets are not loaded yet") end
+            local out = { killers = {}, items = {}, skins = {}, itemskins = {}, emotes = {} }
+            local function add(kind, obj, owner, detail)
+                local name = obj.Name
+                out[kind][#out[kind] + 1] = {
+                    name = name, label = kind == "killers" and name == "Hidden" and "The Hidden" or name,
+                    owner = owner, detail = detail,
+                }
+            end
+            for _, killer in ipairs(killers:GetChildren()) do
+                if killer.ClassName == "Folder" and killer:FindFirstChild("Model") then
+                    add("killers", killer, nil, "Killer")
+                    local skins = killer:FindFirstChild("Skins")
+                    if skins then
+                        for _, skin in ipairs(skins:GetChildren()) do
+                            if skin.ClassName == "Folder" then
+                                local parts = {}
+                                for _, slot in ipairs({ "Head", "Torso", "Legs", "Weapon" }) do
+                                    if skin:FindFirstChild(slot) then parts[#parts + 1] = slot end
+                                end
+                                add("skins", skin, killer.Name, #parts > 0 and table.concat(parts, ", ") or "Outfit")
+                            end
+                        end
+                    end
+                    task.wait()
+                    if not state.running then return nil end
+                end
+            end
+            for _, item in ipairs(items:GetChildren()) do
+                if item.ClassName == "Decal" then
+                    add("items", item, nil, "Item")
+                    local skins = item:FindFirstChild("Skins")
+                    if skins then
+                        for _, skin in ipairs(skins:GetChildren()) do
+                            if skin.ClassName == "Decal" then add("itemskins", skin, item.Name, "Item skin") end
+                        end
+                    end
+                    task.wait()
+                    if not state.running then return nil end
+                end
+            end
+            for _, emote in ipairs(emotes:GetChildren()) do
+                if emote.ClassName == "Folder" then add("emotes", emote, nil, "Emote") end
+            end
+            for _, list in pairs(out) do
+                table.sort(list, function(a, b)
+                    if (a.owner or "") ~= (b.owner or "") then return (a.owner or "") < (b.owner or "") end
+                    return a.name < b.name
+                end)
+            end
+            return out
+        end)
+        inventory.busy = false
+        if not state.running or _G.vdHub ~= state then return end
+        if not ok or type(catalog) ~= "table" then
+            inventory.error = "Catalog unavailable. Try Refresh."
+            warn("[vdHub inventory] " .. tostring(catalog))
+            return
         end
-    end
-
-    local bodyH = minimized and 0 or (UH - HEAD)
-    local overWindow = mx >= UX and mx <= UX + UW and my >= UY and my <= UY + HEAD + bodyH
-    -- tell the aimbot's charge tracker to ignore presses that began on the
-    -- panel, or clicking a toggle would read as winding up a throw
-    if justPressed and overWindow then uiCapture = true end
-    if not mDown then uiCapture = false end
-
-    if clickedId == "min" then minimized = not minimized end
-    if clickedId == "cls" then
-        -- full teardown, not just a feature stop (the old X left the whole
-        -- overlay on screen with the loops dead)
-        task.spawn(function() if state.stop then pcall(state.stop) end end)
-        return
-    end
-
-    -- drag by the header, excluding the buttons
-    if justPressed and my >= UY and my <= UY + HEAD and mx >= UX and mx <= UX + UW - 64 then
-        dragging = true; dragOff.x = mx - UX; dragOff.y = my - UY
-    end
-    if not mDown then dragging = false end
-    if dragging then UX = mx - dragOff.x; UY = my - dragOff.y end
-
-    ------------------------------------------------------------------
-    -- shell: soft shadow, body, header gradient, rail
-    ------------------------------------------------------------------
-    local totalH = HEAD + bodyH
-    for i = 3, 1, -1 do
-        S(UX - i * 2, UY - i * 2 + 3, UW + i * 4, totalH + i * 4, COL.shadow, R + i * 2, 0.05 * i)
-    end
-    S(UX, UY, UW, totalH, COL.bg, R)
-    grad(UX, UY, UW, HEAD, COL.bar, COL.barTo, 10, R)
-
-    S(UX + 12, UY + 11, 4, 12, COL.accent, 2)
-    S(UX + 18, UY + 14, 4, 6,  COL.accent2, 2)
-    local ttl = T("VIOLENCE DISTRICT", UX + 30, UY + 4, 15, COL.text)
-    local twid = 150
-    if ttl then
-        local okb, b = pcall(function() return ttl.TextBounds end)
-        if okb and b then twid = b.X end
-    end
-    T("HUB", UX + 38 + twid, UY + 6, 12, COL.accent)
-
-    local mh, ch = (hoverId == "min"), (hoverId == "cls")
-    S(UX + UW - 56, UY + 8, 20, 18, mh and COL.panel or COL.bg2, R, mh and OPA or 0.6)
-    S(UX + UW - 51, UY + 20, 10, 2, COL.text, 1)
-    rect("min", UX + UW - 56, UY + 8, 20, 18)
-    S(UX + UW - 30, UY + 8, 20, 18, ch and COL.bad or COL.bg2, R, ch and OPA or 0.6)
-    T("x", UX + UW - 20, UY + 5, 15, ch and COL.knob or COL.bad, true)
-    rect("cls", UX + UW - 30, UY + 8, 20, 18)
-
-    if minimized then
-        for i = siUse + 1, #sq do sq[i].Visible = false end
-        for i = tiUse + 1, #tx do tx[i].Visible = false end
-        prevHot = hot
-        return
-    end
-
-    -- rail
-    S(UX, UY + HEAD, RAIL, bodyH, COL.bg2, 0, OPA)
-    S(UX + RAIL, UY + HEAD, 1, bodyH, COL.border)
-
-    local ry = UY + HEAD + 10
-    ry = ry + railItem("Pallet",     "pallet",   UX + 8, ry, RAIL - 16)
-    ry = ry + railItem("Skillcheck", "skill",    UX + 8, ry, RAIL - 16)
-    ry = ry + railItem("Vault",      "vault",    UX + 8, ry, RAIL - 16)
-    ry = ry + railItem("Veil Aim",   "veil",     UX + 8, ry, RAIL - 16)
-
-    -- settings sits apart at the foot of the rail: the "settings button"
-    local sy = UY + totalH - 42
-    S(UX + 8, sy - 10, RAIL - 16, 1, COL.border)
-    railItem("Settings", "settings", UX + 8, sy, RAIL - 16)
-
-    -- unsafe-memory banner: pallet is the only feature that does not need it
-    local unsafe = unsafeOn()
-    if not unsafe and state.tab ~= "pallet" and state.tab ~= "settings" then
-        T("Unsafe LuaU OFF", UX + 12, UY + totalH - 66, 11, COL.bad)
-    end
-
-    ------------------------------------------------------------------
-    -- content
-    ------------------------------------------------------------------
-    local pad    = UX + RAIL + 16
-    local innerW = UW - RAIL - 32
-    local y      = UY + HEAD + 14
-
-    if state.tab == "pallet" then
-        y = y + toggleRow("Auto Pallet", pad, y, innerW,
-            function() return c.p_enabled end,
-            function(v) c.p_enabled = v end)
-        y = y + 6
-        y = y + section("Stun box", pad, y, innerW)
-        y = y + stepper("Interact radius", pad, y, innerW,
-            function() return c.interactionRadius end,
-            function(v) c.interactionRadius = v end, 1, 30, 1, "%d")
-        y = y + stepper("Stun reach", pad, y, innerW,
-            function() return c.stunReach end,
-            function(v) c.stunReach = v end, 0, 15, 1, "%d")
-        y = y + stepper("Stun width", pad, y, innerW,
-            function() return c.stunWidth end,
-            function(v) c.stunWidth = v end, 0, 15, 1, "%d")
-        y = y + stepper("Stun height", pad, y, innerW,
-            function() return c.stunHeight end,
-            function(v) c.stunHeight = v end, 0, 15, 1, "%d")
-        y = y + 10
-        card(pad - 8, y, innerW + 16, 96)
-        local cy, cx, cw = y + 10, pad, innerW
-        cy = cy + statRight("Pallets tracked", tostring(#pallets), cx, cy, cw, COL.text)
-        cy = cy + statRight("Killer visible", #killerRoots > 0 and "YES" or "--", cx, cy, cw,
-                #killerRoots > 0 and COL.warn or COL.dim)
-        cy = cy + statRight("At a pallet", pStat.elig and "YES" or "--", cx, cy, cw,
-                pStat.elig and COL.on or COL.dim)
-        cy = cy + statRight("Stun zone", pStat.inZone and "FIRE" or "--", cx, cy, cw,
-                pStat.inZone and COL.warn or COL.dim)
-        cy = cy + statRight("Range  pallet / killer", ("%s / %s"):format(
-                pStat.nearD and ("%.1f"):format(pStat.nearD) or "--",
-                pStat.killD and ("%.1f"):format(pStat.killD) or "--"), cx, cy, cw, COL.dim)
-        y = y + 104
-        T(pStat.hp == false and "Health <= 50 -- the game blocks the drop" or "Key: SPACE",
-            pad, y, 11, pStat.hp == false and COL.bad or COL.dim)
-
-    elseif state.tab == "skill" then
-        y = y + toggleRow("Auto Skillcheck", pad, y, innerW,
-            function() return c.sc_enabled end,
-            function(v) c.sc_enabled = v end)
-        y = y + 6
-        y = y + section("Timing", pad, y, innerW)
-        y = y + stepper("Lead (deg)", pad, y, innerW,
-            function() return c.sc_lead end,
-            function(v) c.sc_lead = v end, 0, 10, 1, "%d")
-        y = y + 12
-        if not unsafe then
-            card(pad - 8, y, innerW + 16, 62)
-            T("Unsafe LuaU is disabled", pad, y + 10, 13, COL.bad)
-            T("Enable 'Allow Unsafe LuaU' in Matcha", pad, y + 28, 11, COL.warn)
-            T("settings to read the skillcheck needle.", pad, y + 42, 11, COL.warn)
-            y = y + 70
-        else
-            card(pad - 8, y, innerW + 16, 116)
-            local cy = y + 9
-            cy = cy + statRight("Line / Goal", ("%s / %s"):format(
-                    scLast.l and ("%.0f"):format(scLast.l) or "--",
-                    scLast.g and ("%.0f"):format(scLast.g) or "--"), pad, cy, innerW, COL.text)
-            cy = cy + statRight("Success window", tostring(scLast.win or "--"), pad, cy, innerW, COL.dim)
-            cy = cy + statRight("Checks / inputs", ("%d / %d"):format(scChecks, scHits),
-                    pad, cy, innerW, scHits > 0 and COL.on or COL.dim)
-            cy = cy + statRight("Missed windows", tostring(scStat.misses), pad, cy, innerW,
-                    scStat.misses > 0 and COL.warn or COL.dim)
-            cy = cy + statRight("Game binding", scStat.key, pad, cy, innerW, COL.text)
-            cy = cy + statRight("Prompt", scStat.offset and "VERIFIED" or "WAITING", pad, cy, innerW,
-                    scStat.offset and COL.on or COL.dim)
-            y = y + 124
-        end
-        T(scStat.status, pad, y, 11, scStat.error and COL.bad or COL.dim)
-        y = y + 18
-        T("Repair, healing and chained checks.", pad, y, 11, COL.dim)
-
-    elseif state.tab == "vault" then
-        y = y + toggleRow("Always Fast Vault", pad, y, innerW,
-            function() return c.fv_enabled end,
-            function(v) c.fv_enabled = v end)
-        y = y + 6
-        y = y + section("Approach", pad, y, innerW)
-        T("Sprint at a window from any angle.", pad, y, 12, COL.text)
-        y = y + 18
-        T("Short run-ups and repeat vaults are handled.", pad, y, 11, COL.dim)
-        y = y + 18
-        T("Sprinting and normal movement are required.", pad, y, 11, COL.dim)
-        y = y + 26
-        card(pad - 8, y, innerW + 16, 98)
-        local cy = y + 9
-        cy = cy + statRight("Windows tracked", tostring(#vaults), pad, cy, innerW, COL.text)
-        cy = cy + statRight("Assist active", fvStat.holding and "YES" or "--", pad, cy, innerW,
-                fvStat.holding and COL.on or COL.dim)
-        cy = cy + statRight("Vaults / fast", ("%d / %d"):format(fvStat.vaults, fvStat.fast),
-                pad, cy, innerW, fvStat.fast > 0 and COL.on or COL.dim)
-        cy = cy + statRight("Last tier", fvStat.tier or "--", pad, cy, innerW,
-                fvStat.tier == "fast" and COL.on or COL.dim)
-        cy = cy + statRight("Game reason", fvStat.reason or "--", pad, cy, innerW, COL.dim)
-        y = y + 106
-        T(fvStat.status, pad, y, 11, fvStat.error and COL.warn or COL.dim)
-        y = y + 18
-        T("Switching off restores the normal vault rules.", pad, y, 11, COL.dim)
-
-    elseif state.tab == "veil" then
-        y = y + toggleRow("Veil Spear Aimbot", pad, y, innerW,
-            function() return c.va_enabled end,
-            function(v) c.va_enabled = v end)
-        y = y + 4
-        y = y + section("Targeting", pad, y, innerW)
-        y = y + stepper("FOV", pad, y, innerW,
-            function() return c.va_fov end,
-            function(v) c.va_fov = v end, 5, 90, 5, "%d deg")
-        y = y + stepper("Range", pad, y, innerW,
-            function() return c.va_range end,
-            function(v) c.va_range = v end, 40, 400, 20, "%d")
-        y = y + stepper("Smoothing", pad, y, innerW,
-            function() return c.va_smooth end,
-            function(v) c.va_smooth = math.floor(v + 0.5) end,
-            1, 20, 1, "%d")
-        y = y + 6
-        local hw = innerW / 2 - 4
-        chip("Lead target",  pad,          y, hw, function() return c.va_lead end,      function(v) c.va_lead = v end)
-        chip("Euler fix",    pad + hw + 8, y, hw, function() return c.va_euler end,     function(v) c.va_euler = v end)
-        y = y + 28
-        -- Matcha has no working raycast (see vaRayUsable), so name the chip after
-        -- what it can actually do instead of leaving a dead filter looking live.
-        local losLbl = (vaStat.losOK == false) and "LOS: n/a here" or "Line of sight"
-        chip(losLbl,          pad,          y, hw, function() return c.va_los end,      function(v) c.va_los = v end)
-        chip("Auto-cal",      pad + hw + 8, y, hw, function() return c.va_autocal end,  function(v) c.va_autocal = v end)
-        y = y + 28
-        chip("Charge only",  pad,          y, hw, function() return c.va_holdOnly end,  function(v) c.va_holdOnly = v end)
-        chip("Cam origin",   pad + hw + 8, y, hw, function() return c.va_originCam end, function(v) c.va_originCam = v end)
-        y = y + 28
-        -- full width: this is the headline targeting behaviour, so give it the row
-        chip("Sticky aim (hold target)", pad, y, innerW,
-            function() return c.va_sticky end, function(v) c.va_sticky = v end)
-        y = y + 34
-
-        card(pad - 8, y, innerW + 16, 112)
-        local cy = y + 9
-        cy = cy + statRight("Target",
-                (vaStat.target or "--") .. (vaStat.held and "   LOCK" or ""),
-                pad, cy, innerW,
-                vaStat.held and COL.accent or (vaStat.target and COL.on or COL.dim))
-        cy = cy + statRight("Distance", vaStat.dist and ("%.0f"):format(vaStat.dist) or "--",
-                pad, cy, innerW, COL.text)
-        cy = cy + statRight("Charge", ("%.2fs  %s"):format(vaStat.hold or 0,
-                vaStat.tier or "--"), pad, cy, innerW,
-                (vaStat.tier == "CHARGED") and COL.warn or COL.text)
-        cy = cy + statRight("Launch speed", vaStat.speed and ("%.1f"):format(vaStat.speed) or "--",
-                pad, cy, innerW, COL.text)
-        cy = cy + statRight("Flight / drop", ("%s / %s"):format(
-                vaStat.flight and ("%.2fs"):format(vaStat.flight) or "--",
-                vaStat.drop   and ("%.1f"):format(vaStat.drop)    or "--"),
-                pad, cy, innerW, COL.dim)
-        cy = cy + statRight("GMult", vaStat.gmult
-                and ("%.3f  (%d arcs)"):format(c.va_gmult or 1, vaStat.measN or 0)
-                or ("%.3f  (default)"):format(c.va_gmult or 1),
-                pad, cy, innerW, vaStat.gmult and COL.on or COL.warn)
-        y = y + 120
-
-        if vaStat.cd and vaStat.cd > 0.5 then
-            T(("Charged throw on cooldown: %.0fs"):format(vaStat.cd), pad, y, 11, COL.warn)
-        elseif not vaStat.addr and c.va_enabled then
-            T("Resolving camera address...", pad, y, 11, COL.warn)
-        elseif vaStat.solved then
-            T("Solution locked -- release to throw.", pad, y, 11, COL.on)
-        else
-            T("Hold attack with a spear equipped to aim.", pad, y, 11, COL.dim)
-        end
-
-    else  -- settings
-        y = y + section("Theme", pad, y, innerW)
-        local hw = innerW / 2 - 4
-        for i = 1, #THEMES do
-            local col = (i - 1) % 2
-            local row = math.floor((i - 1) / 2)
-            themeCell(i, pad + col * (hw + 8), y + row * 36, hw)
-        end
-        y = y + math.ceil(#THEMES / 2) * 36 + 8
-        y = y + section("Panel", pad, y, innerW)
-        y = y + stepper("Opacity", pad, y, innerW,
-            function() return c.ui_opacity end,
-            function(v) c.ui_opacity = math.floor(v * 20 + 0.5) / 20 end,
-            0.35, 1, 0.05, "%.2f")
-        y = y + stepper("Corner radius", pad, y, innerW,
-            function() return c.ui_round end,
-            function(v) c.ui_round = v end, 0, 14, 2, "%d px")
-        y = y + 12
-        T("Settings are not persisted -- a reload resets", pad, y, 11, COL.dim); y = y + 14
-        T("every toggle on every tab.", pad, y, 11, COL.dim); y = y + 18
-        T("Stop the hub:  _G.vdHub.stop()", pad, y, 11, COL.accent)
-    end
-
-    for i = siUse + 1, #sq do sq[i].Visible = false end
-    for i = tiUse + 1, #tx do tx[i].Visible = false end
-    prevHot = hot
+        inventory.catalog, inventory.loaded, inventory.total = catalog, true, 0
+        for _, list in pairs(catalog) do inventory.total = inventory.total + #list end
+        inventory.setCategory(inventory.category)
+        print("[vdHub inventory] Loaded " .. inventory.total .. " local catalog entries; server ownership unchanged.")
+    end)
+    return true
 end
 
 
-local renderConn
-renderConn = RunService.RenderStepped:Connect(draw)
-
---======================================================================
---  STOP
---======================================================================
-state.stop = function()
-    state.running = false
-    scReleaseInput()
-    local restored = fvRestore()
-    if renderConn then renderConn:Disconnect() end
-    for i=1,#sq do pcall(function() sq[i]:Remove() end) end
-    for i=1,#tx do pcall(function() tx[i]:Remove() end) end
-    if restored then
-        if _G.vdHub == state then _G.vdHub = nil end
-    else
-        warn("[vdHub] Vault restore pending. Enable Unsafe LuaU, then call _G.vdHub.stop() again.")
-    end
+-- JDUI presentation. Gameplay configuration and callbacks remain unchanged.
+local ui = jdFactory() or _G.JDUI
+assert(type(ui)=="table" and ui.AddTab, "JDUI did not return its UI API")
+state.ui=ui
+local nativeDestroy=ui.Destroy
+local stopping=false
+state.stop=function()
+    if stopping then return false end
+    stopping=true
+    state.running=false uiCapture=false
+    fvCancelResolve() scReleaseInput()
+    local restored=fvRestore()
+    nativeDestroy(ui)
+    if restored and _G.vdHub==state then _G.vdHub=nil end
+    stopping=false
     return restored
 end
+ui.Destroy=function(self) return state.stop() end
+local function setupJDUI()
+ui:SetTitle("VD Hub")
+ui:SetSubtitle("Violence District")
+ui:SetKeybind(0x4C)
+ui:SetLayout("Compact")
+ui:SetOverflow("Scroll")
+ui.StartupSound=false
+local main=ui.Home
+main.Title="Main" main.Icon="home" main.Controls={}
+main:SetColumns(2)
+local c=state.cfg
+local controls={}
+state.controls=controls
+local function toggle(panel,title,key,callback,description)
+    local control=panel:AddToggle({Title=title,Description=description or "",Default=c[key],Save=false,
+        Callback=function(value)
+            if not state.running then return end
+            if callback then callback(value) else c[key]=value end
+        end})
+    controls[key]=control
+    return control
+end
+local function slider(panel,title,key,lo,hi,step,suffix)
+    local control=panel:AddSlider({Title=title,Default=c[key],Min=lo,Max=hi,Step=step,Suffix=suffix,Save=false,
+        Callback=function(value) if state.running then c[key]=value end end})
+    controls[key]=control
+    return control
+end
+local function info(panel,title,provider)
+    panel:AddDivider({Title=title}) return panel:AddLabel({Title=provider,Tooltip=title,Save=false})
+end
+local p=main:AddIsland({Title="Auto Pallet",Column=1})
+toggle(p,"Auto Pallet","p_enabled",nil,"Drop when a killer enters the stun zone.")
+slider(p,"Interact radius","interactionRadius",1,30,1," studs")
+slider(p,"Stun reach","stunReach",0,15,1," studs")
+slider(p,"Stun width","stunWidth",0,15,1," studs")
+slider(p,"Stun height","stunHeight",0,15,1," studs")
+info(p,"Pallet status",function()
+ return string.format("%d tracked / Killer %s / %s",#pallets,#killerRoots>0 and "visible" or "--",pStat.inZone and "READY" or "Waiting")
+end)
+info(p,"Drop key: SPACE",function() return pStat.hp==false and "Health must be above 50." or
+ string.format("At pallet: %s / Distance: %s",pStat.elig and "YES" or "--",pStat.nearD and string.format("%.1f",pStat.nearD) or "--") end)
+local sc=main:AddIsland({Title="Skillchecks",Column=2})
+toggle(sc,"Auto Skillcheck","sc_enabled")
+slider(sc,"Timing lead","sc_lead",0,10,1," deg")
+info(sc,"Live timing",function() return string.format("%d checks / %d inputs / %d misses",scChecks,scHits,scStat.misses or 0) end)
+info(sc,"Skillcheck status",function() return unsafeOn() and scStat.status or "Enable Allow Unsafe LuaU in Matcha." end)
+info(sc,"Needle / goal / window",function() return string.format("%s / %s / %s",scLast.l and string.format("%.0f",scLast.l) or "--",scLast.g and string.format("%.0f",scLast.g) or "--",tostring(scLast.win or "--")) end)
+info(sc,"Game binding",function() return tostring(scStat.key or "--") end)
+local fv=main:AddIsland({Title="Fast Vault",Column=2})
+toggle(fv,"Always Fast Vault","fv_enabled",fvSetEnabled,"Sprint at a window from any angle.")
+info(fv,"Vault status",function() return fvStat.status end)
+info(fv,"Vaults / fast",function() return string.format("%d / %d / Tier: %s",fvStat.vaults,fvStat.fast,fvStat.tier or "--") end)
+info(fv,"Windows / reason",function() return tostring(#vaults).." / "..tostring(fvStat.reason or "--") end)
+local va=main:AddIsland({Title="Veil Aim",Column=1})
+toggle(va,"Veil Spear Aimbot","va_enabled")
+slider(va,"Field of view","va_fov",5,90,5," deg")
+slider(va,"Range","va_range",40,400,20," studs")
+slider(va,"Smoothing","va_smooth",1,20,1)
+for _,v in ipairs({{"Lead target","va_lead"},{"Euler fix","va_euler"},{"Line of sight","va_los"},
+ {"Auto-calibration","va_autocal"},{"Charge only","va_holdOnly"},{"Camera origin","va_originCam"},{"Sticky aim","va_sticky"}}) do toggle(va,v[1],v[2]) end
+info(va,"Target",function() return (vaStat.target or "--")..(vaStat.held and " / LOCK" or "") end)
+info(va,"Distance / launch speed",function() return string.format("%.0f / %.1f",vaStat.dist or 0,vaStat.speed or 0) end)
+info(va,"Charge",function() return string.format("%.2fs / %s",vaStat.hold or 0,vaStat.tier or "--") end)
+info(va,"Flight / drop",function() return string.format("%.2fs / %.1f",vaStat.flight or 0,vaStat.drop or 0) end)
+info(va,"Gravity / measured arcs",function() return string.format("%.3f / %d",c.va_gmult,vaStat.measN or 0) end)
+info(va,"Aim status",function()
+ if vaStat.losOK==false then return "Line of sight unavailable" end
+ if vaStat.cd and vaStat.cd>0.5 then return string.format("Charged throw cooldown: %.0fs",vaStat.cd) end
+ return vaStat.solved and "Solution locked. Release to throw." or "Hold attack with a spear equipped."
+end)
+local catalog=main:AddIsland({Title="Collection",Column=2})
+local categoryNames={}
+for i,v in ipairs(inventory.categories) do categoryNames[i]=v.label end
+local ownerControl,entryControl
+local mapping={}
+local function syncEntries()
+    local options={} mapping={}
+    for i,entry in ipairs(inventory.rows) do
+        local label=string.format("%03d | %s%s",i,entry.owner and entry.owner.." / " or "",entry.label)
+        options[#options+1]=label mapping[label]=entry
+    end
+    if #options==0 then options={"No entries loaded"} end
+    entryControl.Options=options
+    entryControl:SetValue(options[1],true)
+    inventory.selected=mapping[options[1]]
+end
+local function syncOwners()
+    ownerControl.Options=inventory.owners
+    ownerControl:SetValue(inventory.owners[inventory.owner] or "All",true)
+    syncEntries()
+end
+catalog:AddDropdown({Title="Category",Options=categoryNames,Default=categoryNames[1],Save=false,Callback=function(value)
+    for i,name in ipairs(categoryNames) do if name==value then inventory.setCategory(i) break end end
+    syncOwners()
+end})
+ownerControl=catalog:AddDropdown({Title="Owner",Options={"All"},Save=false,Searchable=true,Callback=function(value)
+    for i,name in ipairs(inventory.owners) do if name==value then inventory.setOwner(i) break end end
+    syncEntries()
+end})
+entryControl=catalog:AddDropdown({Title="Entry",Options={"No entries loaded"},Searchable=true,Save=false,Callback=function(value) inventory.selected=mapping[value] end})
+catalog:AddButton({Title="Refresh collection",ButtonText="Refresh",Callback=function() inventory.refresh() end})
+info(catalog,"Selection",function() return inventory.selected and inventory.selected.label or "Choose an entry." end)
+info(catalog,"Details",function() return inventory.selected and inventory.selected.detail or "Local catalog preview." end)
+info(catalog,"Catalog status",function() return inventory.error or (inventory.busy and "Refreshing..." or tostring(#inventory.rows).." entries") end)
+task.spawn(function()
+    inventory.refresh()
+    local lastRows,lastOwners
+    while state.running and ui.Alive do
+        if lastRows~=inventory.rows or lastOwners~=inventory.owners then
+            lastRows,lastOwners=inventory.rows,inventory.owners
+            syncOwners()
+        end
+        task.wait(0.25)
+    end
+end)
+-- Native JDUI settings retain theme, keybind and overflow controls.
+ui.Settings.Controls={}
+ui.Settings:AddDropdown({Title="Theme",Options={"Purple","Green","Blue","Black"},Default="Purple",Callback=function(v) ui:SetTheme(v) end})
+ui.Settings:AddKeybind({Title="Menu key",Default=0x4C,Callback=function(v) if v then ui:SetKeybind(v) end end})
+ui.Settings:AddDropdown({Title="Content layout",Options={"Scroll","Pages"},Default="Scroll",Callback=function(v) ui:SetOverflow(v) end})
+ui.Settings:AddSlider({Title="UI scale",Min=0.5,Max=1.5,Step=0.05,Default=1,Callback=function(v) ui:SetScale(v) end})
+ui.Settings:AddSlider({Title="Opacity",Min=0.35,Max=1,Step=0.05,Default=1,Callback=function(v) ui:SetOpacity(v) end})
+ui.Settings:AddToggle({Title="Reduced motion",Default=false,Callback=function(v) ui.ReducedMotion=v end})
+ui.Settings:AddToggle({Title="Visual effects",Default=true,Callback=function(v) ui.Effects=v end})
+ui.Settings:AddButton({Title="Unload hub",ButtonText="Unload",Callback=function() state.stop() end})
+main:Select() ui:Center()
+state.setVisible=function(v) ui:SetOpen(v) return ui:IsOpen() end
+state.setTheme=function(v) return ui:SetTheme(v) end
+state.themes=function() return {"Purple","Green","Blue","Black"} end
+state.uiInfo=function() return {library="JDUI",version=ui.Version,hidden=not ui:IsOpen(),theme=ui.Theme,running=state.running,controls=#ui:FindControls(""),toggleKey=ui.Keybind} end
+state.uiDiag=function() print(game:GetService("HttpService"):JSONEncode(state.uiInfo())) end
+-- Block automation inputs while interacting with JDUI, including popups.
+task.spawn(function()
+    while state.running and ui.Alive do
+        uiCapture=ui:IsOpen() and isrbxactive() and ismouse1pressed() or false
+        task.wait(0.025)
+    end
+    uiCapture=false
+end)
+ui:Notify({Title="VD Hub",Content="All features are in Main. Press L to toggle.",Type="success",Duration=4})
+end
+local setupOK,setupError=pcall(setupJDUI)
+if not setupOK then state.stop() error(setupError) end
 
--- live introspection (pallets is REBOUND on every scan, so this must be a
--- function -- holding a reference to the table would go stale each round)
 state.debug = function()
     return {
         pallets     = #pallets,
@@ -2179,7 +1895,7 @@ state.debug = function()
         veil        = vaStat,
         camAddr     = vaRot,
         baseG       = vaBaseG(),
-        theme       = (THEMES[state.cfg.theme] or {}).name,
+        theme       = ui.Theme,
     }
 end
 
@@ -2189,71 +1905,6 @@ state.veilRecal = function()
     return vaRotAddr()
 end
 
--- Portability report, for when this script is running on someone else's
--- executor and the UI looks wrong. "Text invisible but the panel draws" is
--- almost always one of the first two lines: no ZIndex support (so the fills
--- win the tie) or a font index this build does not define. Run it there and
--- send back what it prints.
-state.uiDiag = function()
-    print("---- vdHub UI diagnostic ----")
-    print(("ZIndex writable : %s   (false = draw order is up to the executor)")
-        :format(tostring(Z_OK)))
-    print(("Font in use     : %d (%s)  resolved by name, not index")
-        :format(FONT, FONTNAME))
-    local fonts = Drawing.Fonts
-    if type(fonts) == "table" then
-        local parts = {}
-        for k, v in pairs(fonts) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
-        table.sort(parts)
-        print("Drawing.Fonts   : " .. table.concat(parts, ", "))
-    else
-        print("Drawing.Fonts   : " .. type(fonts) .. " (not a table)")
-    end
-    print(("pools           : %d squares, %d texts"):format(#sq, #tx))
-    local t = tx[1]
-    if t then
-        local okB, b = pcall(function() return t.TextBounds end)
-        print(("TextBounds      : %s  (false breaks right-aligned values)")
-            :format(okB and tostring(b) or "unsupported"))
-        local okT, tv = pcall(function() return t.Transparency end)
-        print(("Text.Transparency reads back: %s  (expect 1 = opaque)")
-            :format(okT and tostring(tv) or "unsupported"))
-        local okZ, zv = pcall(function() return t.ZIndex end)
-        print(("Text[1].ZIndex  : %s  (expect %d)")
-            :format(okZ and tostring(zv) or "unsupported", Z_TEXT + 1))
-    end
-    -- the whole point of the fix: every text must outrank every square
-    local function zOf(o)
-        if not o then return "nil" end
-        local k, v = pcall(function() return o.ZIndex end)
-        return k and tostring(v) or "unsupported"
-    end
-    print(("layering        : squares %s..%s   texts %s..%s")
-        :format(zOf(sq[1]), zOf(sq[#sq]), zOf(tx[1]), zOf(tx[#tx])))
-    print(("panel           : %d,%d  %dx%d   theme=%d  opacity=%.2f")
-        :format(UX, UY, UW, UH, state.cfg.theme or 1, state.cfg.ui_opacity or 1))
-    print("-----------------------------")
-    return { zindex = Z_OK, font = FONT, squares = #sq, texts = #tx }
-end
 
--- theme control from the console as well as the Settings tab
-state.themes = function()
-    local out = {}
-    for i, t in ipairs(THEMES) do out[i] = t.name end
-    return out
-end
+print("[vdHub] JDUI loaded -- stop with _G.vdHub.stop()")
 
-state.setTheme = function(i)
-    if type(i) == "string" then
-        for j, t in ipairs(THEMES) do
-            if t.name:lower() == i:lower() then i = j break end
-        end
-    end
-    if not THEMES[i] then return nil end
-    state.cfg.theme = i
-    applyTheme(i)
-    return THEMES[i].name
-end
-
-notify("Violence District Hub", "Loaded. No calibration needed.", 4)
-print("[vdHub] loaded -- stop with _G.vdHub.stop()")
