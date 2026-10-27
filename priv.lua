@@ -1,4 +1,5 @@
---added esp comments are made by claude so it doesnt lose its shit
+--comments are for claude fixed beartrap skillcheck and other stuff
+
 
 --======================================================================
 --  VIOLENCE DISTRICT HUB   (Matcha / Drawing UI)
@@ -35,7 +36,7 @@ local mouse       = lp:GetMouse()
 --======================================================================
 local state = {
     running = true,
-    version = "2026-10-26.4-visuals",
+    version = "2026-10-27.2-beartrap",
     tab     = "main",
     cfg = {
         -- auto pallet
@@ -551,6 +552,7 @@ end)
 local scHits, scChecks = 0, 0
 local scLast = { l = nil, g = nil, win = nil }
 local scStat = { status = "Disabled", key = "Space", misses = 0, errors = 0 }
+state.skillcheck = { status = scStat, timing = scLast }
 local scGui = { refreshAt = 0, resolveAt = 0 }
 local scTrack = {}
 local scHeld, scInput, scInputAt, scWasEnabled = nil, nil, 0, false
@@ -684,6 +686,15 @@ local function scPress(input)
     return ok, err
 end
 
+-- Escape starts with TrapPerfect at needle+168, then advances TrapGoal
+-- after each result. The needle accumulates rotations across the chain.
+local function scTrapGoal(lr, perfect, goal)
+    if not scFinite(lr) or not scFinite(perfect) then return nil end
+    if lr <= perfect + 116 then return perfect end
+    if scFinite(goal) and goal > perfect + 116 then return goal end
+    return perfect
+end
+
 local function scRefreshGui(now)
     if now >= scGui.refreshAt then
         scGui.refreshAt = now + 0.25
@@ -691,18 +702,29 @@ local function scRefreshGui(now)
         local gui = pg and pg:FindFirstChild("SkillCheckPromptGui")
         local check = gui and gui:FindFirstChild("Check")
         local line = check and check:FindFirstChild("Line")
-        local goal = check and check:FindFirstChild("Goal")
+        local char = lp.Character
+        local trapped = char and char:GetAttribute("Trapped") == true
+        local goal = check and check:FindFirstChild(trapped and "TrapPerfect" or "Goal")
+        local trapGoal = trapped and check and check:FindFirstChild("TrapGoal") or nil
+        local tid = trapGoal and trapGoal.Address
         local lid, gid = line and line.Address, goal and goal.Address
-        if lid ~= scGui.lid or gid ~= scGui.gid then
+        if lid ~= scGui.lid or gid ~= scGui.gid or trapped ~= scGui.trapped or tid ~= scGui.tid then
             scGui.off, scGui.resolveAt = nil, 0
             scTrack = {}
             scStat.offset = nil
         end
         scGui.line, scGui.goal, scGui.lid, scGui.gid = line, goal, lid, gid
+        scGui.trapped, scGui.trapGoal, scGui.tid = trapped, trapGoal, tid
+        scStat.mode = trapped and "Beartrap escape" or "Generator / healing"
     end
     if scGui.line and scGui.goal and not scGui.off and now >= scGui.resolveAt then
         scGui.resolveAt = now + 0.5
         scGui.off = resolveSkillOffset(scGui.line, scGui.goal)
+        if scGui.off and scGui.trapped then
+            if not scGui.trapGoal or not scRotationSignature(scGui.trapGoal, scGui.off, scGui.trapGoal.AbsolutePosition) then
+                scGui.off = nil
+            end
+        end
         scStat.offset = scGui.off
     end
 end
@@ -742,7 +764,11 @@ local function scStep()
         return
     end
     local lr, gr = readSkillRots(scGui.line, scGui.goal, scGui.off)
-    if not lr then
+    if lr and scGui.trapped then
+        local trapRotation = scGui.trapGoal and rdf(scGui.trapGoal.Address + scGui.off)
+        gr = scTrapGoal(lr, gr, trapRotation)
+    end
+    if not lr or not gr then
         scGui.off, scStat.offset, scTrack = nil, nil, {}
         scStat.status = "Refreshing GUI layout"
         return
@@ -847,7 +873,8 @@ local function fvRead(cache, key)
 end
 
 local function fvBuildCache(rows)
-    if type(rows) ~= "table" or #rows ~= 5 then return nil, "Vault module not uniquely resolved" end
+    if type(rows) ~= "table" or #rows == 0 then return nil, "Survivor module not loaded yet" end
+    if #rows ~= 5 then return nil, "Multiple vault tables found; waiting for a unique match" end
     local cache = { rows = rows, byKey = {}, originals = {}, written = {}, job = game.JobId }
     for _, row in ipairs(rows) do
         if type(row) ~= "table" or row.type ~= "number" or type(row.addr) ~= "number"
@@ -856,8 +883,13 @@ local function fvBuildCache(rows)
         end
         cache.byKey[row.key] = row
         local value = fvRead(cache, row.key)
-        if not fvSame(value, FV_ORIGINAL[row.key]) then return nil, "Vault rules differ from this build" end
-        cache.originals[row.key] = value
+        local original = FV_ORIGINAL[row.key]
+        local patched = FV_PATCH[row.key] ~= nil and fvSame(value, FV_PATCH[row.key])
+        if not fvSame(value, original) and not patched then return nil, "Unexpected vault rule: " .. row.key end
+        -- A previous run can leave a partial or complete patch behind.
+        -- Adopt only our exact known values, retaining the real restore values.
+        cache.originals[row.key] = original
+        cache.written[row.key] = patched and not fvSame(value, original)
     end
     for key in pairs(FV_ORIGINAL) do
         if not cache.byKey[key] then return nil, "Incomplete vault table" end
@@ -937,7 +969,7 @@ local function fvResolve(characterId)
         return
     end
     if fvAttemptedFor == characterId and tick() < fvNextResolveAt then
-        fvStat.status = "Waiting for survivor module"
+        fvStat.status = string.format("Retrying vault in %ds", math.max(1, math.ceil(fvNextResolveAt - tick())))
         return
     end
     fvResolving, fvAttemptedFor = true, characterId
@@ -975,11 +1007,12 @@ local function fvResolve(characterId)
         if ok and cache then
             fvCache, state._vaultCache = cache, cache
             fvStat.ready, fvStat.error = true, nil
+            fvFault, fvNextResolveAt, fvRetryDelay = nil, 0, 5
         else
             fvNextResolveAt = tick() + fvRetryDelay
             fvRetryDelay = math.min(fvRetryDelay * 2, 30)
             fvStat.error = tostring(ok and err or cache)
-            fvStat.status = "Waiting for survivor module"
+            fvStat.status = "Vault lookup failed; retry scheduled"
         end
     end)
 end
@@ -1023,18 +1056,32 @@ task.spawn(function()
                 if not id then
                     fvStat.status = "Waiting for character"
                 elseif not fvSurvivorReady() then
-                    fvStat.status = "Waiting for survivor module"
+                    fvStat.status = "Waiting for Survivor team"
                 else
                     fvResolve(id)
                 end
-            elseif fvFault then
-                fvStat.status = fvFault
+            elseif fvFault and tick() < fvNextResolveAt then
+                fvStat.status = string.format("Recovering vault in %ds", math.max(1, math.ceil(fvNextResolveAt - tick())))
             else
                 local applied, why = fvApply()
                 fvStat.holding = applied
                 fvStat.status = applied and "Ready - sprint to vault" or why
                 fvStat.error = applied and nil or why
-                if not applied then fvFault = why end
+                if not applied then
+                    fvFault = why
+                    fvNextResolveAt = tick() + 5
+                    local stale = fvCache.job ~= game.JobId
+                        or not fvSame(fvRead(fvCache, "ARRIVE_GRACE"), fvCache.originals.ARRIVE_GRACE)
+                    -- Never restore through stale addresses. Re-resolve the live
+                    -- table; known leftover patch values can be adopted above.
+                    if stale or fvRestore() then
+                        fvCache, state._vaultCache = nil, nil
+                        fvStat.ready, fvStat.holding = false, false
+                        fvAttemptedFor = id
+                    end
+                else
+                    fvFault = nil
+                end
             end
         end)
         if not ok then
@@ -1736,6 +1783,10 @@ local function createVisuals(ws, cfg, register, alive)
     end
     function v.classify(o,map)
         local n=string.lower(o.Name or "")
+        local category
+        if n=="beartrap" or n=="bear_trap" then category="beartraps"
+        elseif n=="pumpkin" or n:match("^pumpkin%d+$") then category="pumpkins" end
+        if not category and n~="palletpoint" and n~="vaulttrigger" and n~="generatorbody" then return end
         local par=o.Parent
         if not par then return end
         if n=="palletpoint" and part(o) and map and o:IsDescendantOf(map) then
@@ -1751,21 +1802,7 @@ local function createVisuals(ws, cfg, register, alive)
         elseif n=="generatorbody" and part(o) and map and o:IsDescendantOf(map) then
             return "generators",par,o
         end
-        local category
-        if n=="beartrap" or n=="bear_trap" then category="beartraps"
-        elseif n=="pumpkin" or n:match("^pumpkin%d+$") then category="pumpkins" end
-        -- Seasonal objects can have arbitrary model names inside Map.Pumpkins.
-        if not category and o.ClassName~="Model" and not part(o) then return end
-        local node=o
-        for _=1,12 do
-            if not node then break end
-            local p=node.Parent
-            if p and p.Name=="Pumpkins" and map and p:IsDescendantOf(map) then
-                category="pumpkins" o=node break
-            end
-            if not p or p.Address==ws.Address then break end
-            node=p
-        end
+        local node
         if not category then return end
         if category=="pumpkins" and (not map or not o:IsDescendantOf(map)) then return end
         if o.ClassName=="StringValue" then o=o.Parent end
@@ -1798,6 +1835,7 @@ local function createVisuals(ws, cfg, register, alive)
         v.total=0
     end
     function v.reconcile(list,map)
+        local sliceStart=os.clock()
         local seen={}
         local counts={pallets=0,windows=0,generators=0,beartraps=0,pumpkins=0}
         local total=0
@@ -1834,7 +1872,7 @@ local function createVisuals(ws, cfg, register, alive)
                     elseif e then v.remove(key) end
                 end
             end
-            if i%400==0 and v.yield then v.yield() end
+            if v.yield and (i%100==0 or os.clock()-sliceStart>0.002) then v.yield() sliceStart=os.clock() end
         end
         for key in pairs(v.entries) do if not seen[key] then v.remove(key) end end
         v.counts=counts v.total=0
@@ -1846,7 +1884,35 @@ local function createVisuals(ws, cfg, register, alive)
         local ok,err=pcall(function()
             if not cfg.esp_enabled then v.clear() return end
             local map=ws:FindFirstChild("Map")
-            v.reconcile(ws:GetDescendants(),map)
+            if not map then v.clear() v.counts={} return end
+            local found={} local stack={ws} local first=1
+            local start=os.clock()
+            while first<=#stack do
+                if not alive() or not cfg.esp_enabled then return end
+                local parent=stack[first] first=first+1
+                local seasonal=parent.Name=="Pumpkins" and parent:IsDescendantOf(map)
+                for _,child in ipairs(parent:GetChildren()) do
+                    local class,name=child.ClassName,string.lower(child.Name or "")
+                    if seasonal and (class=="Model" or class=="Part" or class=="MeshPart") then
+                        -- Preserve anonymous pumpkin models without an ancestry walk on every part.
+                        local root=rootOf(child,{"Pumpkin","hitbox","RootPart"})
+                        if root then
+                            found[#found+1]={Name="Pumpkin",ClassName=child.ClassName,Parent=child.Parent,Address=child.Address,PrimaryPart=root,
+                                FindFirstChild=function(_,n) return child:FindFirstChild(n) end,
+                                GetChildren=function() return child:GetChildren() end,
+                                IsDescendantOf=function(_,p) return child:IsDescendantOf(p) end}
+                        end
+                    else
+                        if name=="palletpoint" or name=="vaulttrigger" or name=="generatorbody" or name=="beartrap" or name=="bear_trap" or name=="pumpkin" or name:match("^pumpkin%d+$") then found[#found+1]=child end
+                        local container=class=="Model" or class=="Folder" or class=="Part" or class=="MeshPart" or class=="UnionOperation"
+                        if container and class~="Camera" and name~="lobby" and not name:find("preview",1,true) and not name:find("ghost",1,true) then
+                            if class~="Model" or not child:FindFirstChild("Humanoid") then stack[#stack+1]=child end
+                        end
+                    end
+                end
+                if v.yield and (first%64==0 or os.clock()-start>0.002) then v.yield() start=os.clock() end
+            end
+            v.reconcile(found,map)
         end)
         if not ok then v.error=tostring(err) end
         v.scanning=false
@@ -1874,10 +1940,12 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
         {-1,-1,1},{1,-1,1},{1,1,1},{-1,1,1}}
     local faces={{1,4,8,5},{2,6,7,3},{1,5,6,2},{4,3,7,8},{1,2,3,4},{5,8,7,6}}
     local function hide(slot)
+        if not slot.visible then return end
         for _,o in ipairs(slot.objects) do o.Visible=false end
+        slot.visible=false slot.tagVisible=false
     end
     function r.hideAll()
-        for _,slot in ipairs(r.pool) do hide(slot) end
+        for i=1,r.drawn do hide(r.pool[i]) end
         r.drawn=0
     end
     function r.stop()
@@ -1891,7 +1959,7 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
     end
     local ok,err=pcall(function()
         for i=1,128 do
-            local slot={fills={},edges={},objects={}}
+            local slot={fills={},edges={},objects={},visible=false,xy={},projected={}}
             r.pool[i]=slot
             for j=1,3 do
                 local fill=Drawing.new("Quad")
@@ -1910,6 +1978,7 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
     if not ok then r.stop() r.error=tostring(err) return r end
     local function finite(n) return type(n)=="number" and n==n and math.abs(n)<1e7 end
     function r.collect()
+        if not cfg.esp_enabled or not alive() or r.stopped then if #r.targets>0 then r.targets={} end return end
         local camera=ws.CurrentCamera
         local cf=camera and camera.CFrame
         local cameraPosition=cf and cf.Position
@@ -1927,12 +1996,21 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
                     if size.X<=0 or size.Y<=0 or size.Z<=0 or math.max(size.X,size.Y,size.Z)>300 then return end
                     local distance=(p-cameraPosition).Magnitude
                     if distance>cfg.esp_distance then return end
-                    local points={}
-                    for i,c in ipairs(corners) do
-                        points[i]=p + frame.RightVector*(c[1]*size.X*0.5) + frame.UpVector*(c[2]*size.Y*0.5) - frame.LookVector*(c[3]*size.Z*0.5)
-                    end
-                    local delta=cameraPosition-p
                     local right,up,look=frame.RightVector,frame.UpVector,frame.LookVector
+                    local geometry=e.geometry
+                    local signature={p.X,p.Y,p.Z,size.X,size.Y,size.Z,right.X,right.Y,right.Z,up.X,up.Y,up.Z,look.X,look.Y,look.Z}
+                    local changed=not geometry
+                    if geometry then for i,value in ipairs(signature) do if geometry.signature[i]~=value then changed=true break end end end
+                    if changed then
+                        local points={}
+                        for i,c in ipairs(corners) do
+                            local dx,dy,dz=c[1]*size.X*0.5,c[2]*size.Y*0.5,c[3]*size.Z*0.5
+                            points[i]=Vector3.new(p.X+right.X*dx+up.X*dy-look.X*dz,p.Y+right.Y*dx+up.Y*dy-look.Y*dz,p.Z+right.Z*dx+up.Z*dy-look.Z*dz)
+                        end
+                        geometry={signature=signature,points=points} e.geometry=geometry
+                    end
+                    local points=geometry.points
+                    local delta=cameraPosition-p
                     local view={X=delta.X*right.X+delta.Y*right.Y+delta.Z*right.Z,Y=delta.X*up.X+delta.Y*up.Y+delta.Z*up.Z,Z=-(delta.X*look.X+delta.Y*look.Y+delta.Z*look.Z)}
                     return {entry=e,points=points,faces={view.X<0 and 1 or 2,view.Y<0 and 3 or 4,view.Z<0 and 5 or 6},
                         color=colors[e.category],distance=distance,text=string.format("%s  %dm",names[e.category],math.floor(distance/3.57))}
@@ -1951,37 +2029,50 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
         elapsed=elapsed+(tonumber(dt) or 1/60)
         if elapsed<1/30 then return end
         elapsed=0
+        if not cfg.esp_enabled or #r.targets==0 then if r.drawn>0 then r.hideAll() end return end
         local okRender,renderError=pcall(function()
             local used=0
             if cfg.esp_enabled then
                 for _,t in ipairs(r.targets) do
                     if t.entry.active and cfg["esp_"..t.entry.category] then
-                        local projected={} local valid=true local minY=math.huge local sumX=0
+                        local slot=r.pool[used+1]
+                        local projected=slot.projected local valid=true local minY=math.huge local sumX=0
+                        local geometryChanged=false
                         for i,p in ipairs(t.points) do
                             local xy,onScreen=WorldToScreen(p)
                             if not onScreen or not finite(xy.X) or not finite(xy.Y) then valid=false break end
                             projected[i]=xy minY=math.min(minY,xy.Y) sumX=sumX+xy.X
+                            local j=i*2
+                            if slot.xy[j-1]~=xy.X or slot.xy[j]~=xy.Y then geometryChanged=true end
                         end
                         if valid then
                             used=used+1
-                            local slot=r.pool[used]
                             for j,face in ipairs(t.faces) do
-                                local indexes=faces[face]
-                                for _,o in ipairs({slot.fills[j],slot.edges[j]}) do
-                                    o.PointA=projected[indexes[1]] o.PointB=projected[indexes[2]]
-                                    o.PointC=projected[indexes[3]] o.PointD=projected[indexes[4]]
-                                    o.Color=t.color o.Visible=true
+                                local fill,edge=slot.fills[j],slot.edges[j]
+                                if geometryChanged or slot["face"..j]~=face then
+                                    local indexes=faces[face]
+                                    local a,b,c,d=projected[indexes[1]],projected[indexes[2]],projected[indexes[3]],projected[indexes[4]]
+                                    fill.PointA=a fill.PointB=b fill.PointC=c fill.PointD=d
+                                    edge.PointA=a edge.PointB=b edge.PointC=c edge.PointD=d
+                                    slot["face"..j]=face
                                 end
-                                slot.fills[j].Transparency=cfg.esp_opacity
+                                if slot.color~=t.color then fill.Color=t.color edge.Color=t.color end
+                                if not slot.visible then fill.Visible=true edge.Visible=true end
+                                if slot.opacity~=cfg.esp_opacity then fill.Transparency=cfg.esp_opacity end
                             end
                             local tag=slot.tag
-                            tag.Text=t.text tag.Position=Vector2.new(sumX/8,minY-17)
-                            tag.Color=t.color tag.Visible=cfg.esp_names
+                            if slot.text~=t.text then tag.Text=t.text slot.text=t.text end
+                            local tx,ty=sumX/8,minY-17
+                            if slot.tx~=tx or slot.ty~=ty then tag.Position=Vector2.new(tx,ty) slot.tx=tx slot.ty=ty end
+                            if slot.color~=t.color then tag.Color=t.color end
+                            if slot.tagVisible~=cfg.esp_names then tag.Visible=cfg.esp_names slot.tagVisible=cfg.esp_names end
+                            slot.color=t.color slot.opacity=cfg.esp_opacity slot.visible=true
+                            for i,xy in ipairs(projected) do slot.xy[i*2-1]=xy.X slot.xy[i*2]=xy.Y end
                         end
                     end
                 end
             end
-            for i=used+1,#r.pool do hide(r.pool[i]) end
+            for i=used+1,r.drawn do hide(r.pool[i]) end
             r.drawn=used
         end)
         if not okRender then r.error=tostring(renderError) r.hideAll() end
@@ -2002,6 +2093,9 @@ state.cfg.esp_distance=1500
 state.cfg.esp_opacity=0.18
 state.cfg.esp_enabled=false
 for _,key in ipairs({"pallets","windows","generators","beartraps","pumpkins"}) do state.cfg["esp_"..key]=true end
+if previousHub and previousHub.cfg then
+    for key,value in pairs(previousHub.cfg) do if state.cfg[key]~=nil then state.cfg[key]=value end end
+end
 local visuals=createVisuals(Workspace,state.cfg,function() return {Remove=function() end} end,function() return state.running end)
 state.visuals=visuals
 visuals.yield=function() task.wait() end
@@ -2009,7 +2103,7 @@ task.spawn(function()
     while state.running do
         if tick()>=visuals.scanAt then
             visuals.refresh()
-            visuals.scanAt=tick()+3
+            visuals.scanAt=tick()+5
         end
         task.wait(0.15)
     end
@@ -2086,9 +2180,11 @@ info(sc,"Live timing",function() return string.format("%d checks / %d inputs / %
 info(sc,"Skillcheck status",function() return unsafeOn() and scStat.status or "Enable Allow Unsafe LuaU in Matcha." end)
 info(sc,"Needle / goal / window",function() return string.format("%s / %s / %s",scLast.l and string.format("%.0f",scLast.l) or "--",scLast.g and string.format("%.0f",scLast.g) or "--",tostring(scLast.win or "--")) end)
 info(sc,"Game binding",function() return tostring(scStat.key or "--") end)
+info(sc,"Check type",function() return scStat.mode or "Waiting for prompt" end)
 local fv=main:AddIsland({Title="Fast Vault",Column=2})
 toggle(fv,"Always Fast Vault","fv_enabled",fvSetEnabled,"Sprint at a window from any angle.")
 info(fv,"Vault status",function() return fvStat.status end)
+info(fv,"Vault recovery",function() return fvStat.error or "Module verified" end)
 info(fv,"Vaults / fast",function() return string.format("%d / %d / Tier: %s",fvStat.vaults,fvStat.fast,fvStat.tier or "--") end)
 info(fv,"Windows / reason",function() return tostring(#vaults).." / "..tostring(fvStat.reason or "--") end)
 local va=main:AddIsland({Title="Veil Aim",Column=1})
