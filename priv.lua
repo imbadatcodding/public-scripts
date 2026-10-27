@@ -1,4 +1,4 @@
---comments made by claude otherwise claude will lose its shit and use 10B tokens.
+--added esp comments are made by claude so it doesnt lose its shit
 
 --======================================================================
 --  VIOLENCE DISTRICT HUB   (Matcha / Drawing UI)
@@ -35,7 +35,7 @@ local mouse       = lp:GetMouse()
 --======================================================================
 local state = {
     running = true,
-    version = "2026-10-26.2-jdui",
+    version = "2026-10-26.4-visuals",
     tab     = "main",
     cfg = {
         -- auto pallet
@@ -1714,6 +1714,308 @@ function inventory.refresh()
 end
 
 
+
+-- Object discovery and lifecycle; Drawing rendering is independent of native NPC ESP.
+local function createVisuals(ws, cfg, register, alive)
+    local v={entries={},counts={},total=0,error=nil,scanning=false,scanAt=0}
+    local names={pallets="Pallet",windows="Window",generators="Generator",beartraps="Beartrap",pumpkins="Pumpkin"}
+    local function part(o)
+        if not o then return false end
+        local c=o.ClassName
+        return c=="Part" or c=="MeshPart" or c=="UnionOperation" or c=="WedgePart"
+    end
+    local function rootOf(o,preferred)
+        if part(o) then return o end
+        if not o then return end
+        for _,n in ipairs(preferred or {}) do local p=o:FindFirstChild(n) if part(p) then return p end end
+        local p=o.PrimaryPart
+        if part(p) then return p end
+        for _,child in ipairs(o:GetChildren()) do
+            if part(child) then return child end
+        end
+    end
+    function v.classify(o,map)
+        local n=string.lower(o.Name or "")
+        local par=o.Parent
+        if not par then return end
+        if n=="palletpoint" and part(o) and map and o:IsDescendantOf(map) then
+            local model=par
+            local owner=model.Name=="Intact" and model.Parent or model
+            if owner and owner:GetAttribute("PalletState")=="Broken" then return end
+            local root=rootOf(model,{"Pallet","PrimaryPartPallet","RootPart"}) or o
+            return "pallets",model,root
+        elseif n=="vaulttrigger" and part(o) and map and o:IsDescendantOf(map) then
+            if par:FindFirstChild("Bottom") or string.lower(par.Name)=="window" then
+                return "windows",par,rootOf(par,{"Bottom","VaultTrigger"}) or o
+            end
+        elseif n=="generatorbody" and part(o) and map and o:IsDescendantOf(map) then
+            return "generators",par,o
+        end
+        local category
+        if n=="beartrap" or n=="bear_trap" then category="beartraps"
+        elseif n=="pumpkin" or n:match("^pumpkin%d+$") then category="pumpkins" end
+        -- Seasonal objects can have arbitrary model names inside Map.Pumpkins.
+        if not category and o.ClassName~="Model" and not part(o) then return end
+        local node=o
+        for _=1,12 do
+            if not node then break end
+            local p=node.Parent
+            if p and p.Name=="Pumpkins" and map and p:IsDescendantOf(map) then
+                category="pumpkins" o=node break
+            end
+            if not p or p.Address==ws.Address then break end
+            node=p
+        end
+        if not category then return end
+        if category=="pumpkins" and (not map or not o:IsDescendantOf(map)) then return end
+        if o.ClassName=="StringValue" then o=o.Parent end
+        if not o or (o.ClassName~="Model" and not part(o)) then return end
+        if part(o) and o.Parent and o.Parent.ClassName=="Model" then
+            local pn=string.lower(o.Parent.Name)
+            if pn=="beartrap" or pn:find("pumpkin",1,true) then o=o.Parent end
+        end
+        -- Exclude held weapons, preview ghosts and camera viewmodels.
+        node=o
+        for _=1,16 do
+            if not node or node.Address==ws.Address then break end
+            local nn=string.lower(node.Name or "")
+            if node.ClassName=="Camera" or node:FindFirstChild("Humanoid") or
+                nn:find("preview",1,true) or nn:find("ghost",1,true) then return end
+            node=node.Parent
+        end
+        local root=rootOf(o,{"hitbox","HitBox","Pumpkin","RootPart"})
+        if root then return category,o,root end
+    end
+    function v.remove(key)
+        local e=v.entries[key]
+        if not e then return end
+        e.active=false
+        if e.handle then pcall(function() e.handle:Remove() end) end
+        v.entries[key]=nil
+    end
+    function v.clear()
+        for key in pairs(v.entries) do v.remove(key) end
+        v.total=0
+    end
+    function v.reconcile(list,map)
+        local seen={}
+        local counts={pallets=0,windows=0,generators=0,beartraps=0,pumpkins=0}
+        local total=0
+        for i,o in ipairs(list) do
+            if not alive() then v.clear() return end
+            local category,model,root=v.classify(o,map)
+            if category and model and root then
+                local key=tostring(model.Address)
+                if not seen[key] then
+                    seen[key]=true counts[category]=counts[category]+1
+                    local wanted=cfg.esp_enabled and cfg["esp_"..category]
+                    local e=v.entries[key]
+                    if wanted and total<128 then
+                        total=total+1
+                        if e and e.root.Address~=root.Address then v.remove(key) e=nil end
+                        if not e then
+                            e={model=model,root=root,category=category,active=true}
+                            local current=e
+                            local ok,handle=pcall(register,{
+                                entry=model,
+                                ShouldDraw=function()
+                                    return alive() and current.active and cfg.esp_enabled and cfg["esp_"..category]
+                                        and current.model.Parent~=nil and current.model:IsDescendantOf(ws)
+                                end,
+                                GetHead=function() return current.root end,
+                                GetRoot=function() return current.root end,
+                                GetDisplayName=function() return names[category] end,
+                                GetHealth=function() return 100 end,
+                                GetMaxHealth=function() return 100 end,
+                            })
+                            if ok and handle then e.handle=handle v.entries[key]=e
+                            else v.error=tostring(handle or "Object tracking unavailable") end
+                        else e.model=model e.root=root end
+                    elseif e then v.remove(key) end
+                end
+            end
+            if i%400==0 and v.yield then v.yield() end
+        end
+        for key in pairs(v.entries) do if not seen[key] then v.remove(key) end end
+        v.counts=counts v.total=0
+        for _ in pairs(v.entries) do v.total=v.total+1 end
+    end
+    function v.refresh()
+        if v.scanning or not alive() then return end
+        v.scanning=true v.error=nil
+        local ok,err=pcall(function()
+            if not cfg.esp_enabled then v.clear() return end
+            local map=ws:FindFirstChild("Map")
+            v.reconcile(ws:GetDescendants(),map)
+        end)
+        if not ok then v.error=tostring(err) end
+        v.scanning=false
+    end
+    function v.changed()
+        for key,e in pairs(v.entries) do
+            if not cfg.esp_enabled or not cfg["esp_"..e.category] then v.remove(key) end
+        end
+        v.total=0 for _ in pairs(v.entries) do v.total=v.total+1 end
+        if v.renderer then v.renderer.hideAll() end
+        v.scanAt=0
+    end
+    return v
+end
+
+-- Filled oriented bounds, drawn through walls without native model registration.
+local function createObjectRenderer(v,ws,cfg,run,alive)
+    local r={pool={},targets={},drawn=0,stopped=false,error=nil}
+    local colors={
+        pallets=Color3.fromRGB(95,235,153),windows=Color3.fromRGB(92,195,255),
+        generators=Color3.fromRGB(255,222,101),beartraps=Color3.fromRGB(255,100,115),
+        pumpkins=Color3.fromRGB(255,154,65)}
+    local names={pallets="Pallet",windows="Window",generators="Generator",beartraps="Beartrap",pumpkins="Pumpkin"}
+    local corners={{-1,-1,-1},{1,-1,-1},{1,1,-1},{-1,1,-1},
+        {-1,-1,1},{1,-1,1},{1,1,1},{-1,1,1}}
+    local faces={{1,4,8,5},{2,6,7,3},{1,5,6,2},{4,3,7,8},{1,2,3,4},{5,8,7,6}}
+    local function hide(slot)
+        for _,o in ipairs(slot.objects) do o.Visible=false end
+    end
+    function r.hideAll()
+        for _,slot in ipairs(r.pool) do hide(slot) end
+        r.drawn=0
+    end
+    function r.stop()
+        if r.stopped then return end
+        r.stopped=true
+        if r.connection then r.connection:Disconnect() end
+        for _,slot in ipairs(r.pool) do
+            for _,o in ipairs(slot.objects) do pcall(function() o:Remove() end) end
+        end
+        r.targets={} r.drawn=0
+    end
+    local ok,err=pcall(function()
+        for i=1,128 do
+            local slot={fills={},edges={},objects={}}
+            r.pool[i]=slot
+            for j=1,3 do
+                local fill=Drawing.new("Quad")
+                table.insert(slot.objects,fill) slot.fills[j]=fill
+                fill.Visible=false fill.Filled=true fill.Transparency=0.16 fill.ZIndex=1
+                local edge=Drawing.new("Quad")
+                table.insert(slot.objects,edge) slot.edges[j]=edge
+                edge.Visible=false edge.Filled=false edge.Thickness=1 edge.Transparency=0.65 edge.ZIndex=2
+            end
+            local tag=Drawing.new("Text")
+            table.insert(slot.objects,tag) slot.tag=tag
+            tag.Visible=false tag.Size=13 tag.Font=(Drawing.Fonts or {}).System or 1
+            tag.Center=true tag.Outline=true tag.Transparency=1 tag.ZIndex=3
+        end
+    end)
+    if not ok then r.stop() r.error=tostring(err) return r end
+    local function finite(n) return type(n)=="number" and n==n and math.abs(n)<1e7 end
+    function r.collect()
+        local camera=ws.CurrentCamera
+        local cf=camera and camera.CFrame
+        local cameraPosition=cf and cf.Position
+        if not cameraPosition or not cfg.esp_enabled or not alive() or r.stopped then r.targets={} return end
+        local out={}
+        for _,e in pairs(v.entries) do
+            if e.active and cfg["esp_"..e.category] then
+                local good,target=pcall(function()
+                    if not e.model.Parent or not e.model:IsDescendantOf(ws) or not e.root.Parent then return end
+                    local frame,size=e.root.CFrame,e.root.Size
+                    if not frame or not size then return end
+                    local p=frame.Position
+                    if not finite(p.X) or not finite(p.Y) or not finite(p.Z) then return end
+                    if not finite(size.X) or not finite(size.Y) or not finite(size.Z) then return end
+                    if size.X<=0 or size.Y<=0 or size.Z<=0 or math.max(size.X,size.Y,size.Z)>300 then return end
+                    local distance=(p-cameraPosition).Magnitude
+                    if distance>cfg.esp_distance then return end
+                    local points={}
+                    for i,c in ipairs(corners) do
+                        points[i]=p + frame.RightVector*(c[1]*size.X*0.5) + frame.UpVector*(c[2]*size.Y*0.5) - frame.LookVector*(c[3]*size.Z*0.5)
+                    end
+                    local delta=cameraPosition-p
+                    local right,up,look=frame.RightVector,frame.UpVector,frame.LookVector
+                    local view={X=delta.X*right.X+delta.Y*right.Y+delta.Z*right.Z,Y=delta.X*up.X+delta.Y*up.Y+delta.Z*up.Z,Z=-(delta.X*look.X+delta.Y*look.Y+delta.Z*look.Z)}
+                    return {entry=e,points=points,faces={view.X<0 and 1 or 2,view.Y<0 and 3 or 4,view.Z<0 and 5 or 6},
+                        color=colors[e.category],distance=distance,text=string.format("%s  %dm",names[e.category],math.floor(distance/3.57))}
+                end)
+                if good and target then out[#out+1]=target end
+            end
+        end
+        table.sort(out,function(a,b) return a.distance<b.distance end)
+        while #out>128 do table.remove(out) end
+        if not alive() or r.stopped then return end
+        r.targets=out
+    end
+    local elapsed=0
+    r.connection=run.RenderStepped:Connect(function(dt)
+        if r.stopped or not alive() then return end
+        elapsed=elapsed+(tonumber(dt) or 1/60)
+        if elapsed<1/30 then return end
+        elapsed=0
+        local okRender,renderError=pcall(function()
+            local used=0
+            if cfg.esp_enabled then
+                for _,t in ipairs(r.targets) do
+                    if t.entry.active and cfg["esp_"..t.entry.category] then
+                        local projected={} local valid=true local minY=math.huge local sumX=0
+                        for i,p in ipairs(t.points) do
+                            local xy,onScreen=WorldToScreen(p)
+                            if not onScreen or not finite(xy.X) or not finite(xy.Y) then valid=false break end
+                            projected[i]=xy minY=math.min(minY,xy.Y) sumX=sumX+xy.X
+                        end
+                        if valid then
+                            used=used+1
+                            local slot=r.pool[used]
+                            for j,face in ipairs(t.faces) do
+                                local indexes=faces[face]
+                                for _,o in ipairs({slot.fills[j],slot.edges[j]}) do
+                                    o.PointA=projected[indexes[1]] o.PointB=projected[indexes[2]]
+                                    o.PointC=projected[indexes[3]] o.PointD=projected[indexes[4]]
+                                    o.Color=t.color o.Visible=true
+                                end
+                                slot.fills[j].Transparency=cfg.esp_opacity
+                            end
+                            local tag=slot.tag
+                            tag.Text=t.text tag.Position=Vector2.new(sumX/8,minY-17)
+                            tag.Color=t.color tag.Visible=cfg.esp_names
+                        end
+                    end
+                end
+            end
+            for i=used+1,#r.pool do hide(r.pool[i]) end
+            r.drawn=used
+        end)
+        if not okRender then r.error=tostring(renderError) r.hideAll() end
+    end)
+    task.spawn(function()
+        while alive() and not r.stopped do
+            local okCollect,collectError=pcall(r.collect)
+            if not okCollect then r.error=tostring(collectError) r.targets={} end
+            task.wait(0.2)
+        end
+        r.stop()
+    end)
+    return r
+end
+
+state.cfg.esp_names=true
+state.cfg.esp_distance=1500
+state.cfg.esp_opacity=0.18
+state.cfg.esp_enabled=false
+for _,key in ipairs({"pallets","windows","generators","beartraps","pumpkins"}) do state.cfg["esp_"..key]=true end
+local visuals=createVisuals(Workspace,state.cfg,function() return {Remove=function() end} end,function() return state.running end)
+state.visuals=visuals
+visuals.yield=function() task.wait() end
+task.spawn(function()
+    while state.running do
+        if tick()>=visuals.scanAt then
+            visuals.refresh()
+            visuals.scanAt=tick()+3
+        end
+        task.wait(0.15)
+    end
+    visuals.clear()
+end)
+
 -- JDUI presentation. Gameplay configuration and callbacks remain unchanged.
 local ui = jdFactory() or _G.JDUI
 assert(type(ui)=="table" and ui.AddTab, "JDUI did not return its UI API")
@@ -1724,6 +2026,8 @@ state.stop=function()
     if stopping then return false end
     stopping=true
     state.running=false uiCapture=false
+    if visuals.renderer then visuals.renderer.stop() end
+    visuals.clear()
     fvCancelResolve() scReleaseInput()
     local restored=fvRestore()
     nativeDestroy(ui)
@@ -1733,6 +2037,7 @@ state.stop=function()
 end
 ui.Destroy=function(self) return state.stop() end
 local function setupJDUI()
+visuals.renderer=createObjectRenderer(visuals,Workspace,state.cfg,RunService,function() return state.running end)
 ui:SetTitle("VD Hub")
 ui:SetSubtitle("Violence District")
 ui:SetKeybind(0x4C)
@@ -1848,6 +2153,28 @@ task.spawn(function()
         task.wait(0.25)
     end
 end)
+
+local vis=ui:AddTab({Title="Visuals",Icon="eye",Columns=1})
+local visGroup=vis:AddIsland({Title="Object ESP / Chams",Column=1})
+toggle(visGroup,"Enable object ESP","esp_enabled",function(value) c.esp_enabled=value visuals.changed() end)
+for _,item in ipairs({{"Pallets","pallets"},{"Windows","windows"},{"Generators","generators"},{"Beartraps","beartraps"},{"Pumpkins","pumpkins"}}) do
+    local key="esp_"..item[2]
+    toggle(visGroup,item[1],key,function(value) c[key]=value visuals.changed() end)
+end
+toggle(visGroup,"Object labels","esp_names")
+slider(visGroup,"Maximum distance","esp_distance",100,3000,100," studs")
+slider(visGroup,"Fill opacity","esp_opacity",0.05,0.5,0.01)
+vis:AddLabel({Title="Object highlights",Description="Colored filled bounds through walls."})
+vis:AddLabel({Title=function() return string.format("Pallets %d / Windows %d / Generators %d",
+ visuals.counts.pallets or 0,visuals.counts.windows or 0,visuals.counts.generators or 0) end})
+vis:AddLabel({Title=function() return string.format("Beartraps %d / Pumpkins %d",
+ visuals.counts.beartraps or 0,visuals.counts.pumpkins or 0) end})
+vis:AddLabel({Title=function() return (visuals.error or visuals.renderer.error) and "ESP: "..tostring(visuals.error or visuals.renderer.error) or "Refreshes automatically as objects spawn." end})
+vis:AddButton({Title="Refresh objects",ButtonText="Refresh",Callback=function() visuals.scanAt=0 end})
+state.visualsTab=vis
+-- Keep the everyday navigation order: Main, Visuals, Settings.
+ui.Tabs={main,vis,ui.Settings}
+
 -- Native JDUI settings retain theme, keybind and overflow controls.
 ui.Settings.Controls={}
 ui.Settings:AddDropdown({Title="Theme",Options={"Purple","Green","Blue","Black"},Default="Purple",Callback=function(v) ui:SetTheme(v) end})
