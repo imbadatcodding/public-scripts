@@ -1,5 +1,5 @@
---comments made for claude fr fr
 
+-- Resolve JDUI before stopping the existing hub, so download failure is recoverable.
 local jdOK,jdSource=pcall(function() return game:HttpGet("https://raw.githubusercontent.com/jdev-studio/jdui/refs/heads/main/JDUI") end)
 assert(jdOK and type(jdSource)=="string","Unable to download JDUI: "..tostring(jdSource))
 local jdFactory,jdError=loadstring(jdSource)
@@ -25,7 +25,7 @@ local mouse       = lp:GetMouse()
 --======================================================================
 local state = {
     running = true,
-    version = "2026-10-27.3-veil",
+    version = "2026-10-28.1-parry",
     tab     = "main",
     cfg = {
         -- auto pallet
@@ -1869,8 +1869,14 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
         for _,e in pairs(v.entries) do
             if e.active and cfg["esp_"..e.category] then
                 local good,target=pcall(function()
-                    if not e.model.Parent or not e.model:IsDescendantOf(ws) or not e.root.Parent then return end
-                    local frame,size=e.root.CFrame,e.root.Size
+                    if not e.model.Parent or not e.root.Parent then return end
+                    local now=os.clock()
+                    local cached=e.sample
+                    if not cached or now>=cached.nextAt then
+                        cached={frame=e.root.CFrame,size=e.root.Size,nextAt=now+(e.category=="beartraps" and .2 or .75)}
+                        e.sample=cached
+                    end
+                    local frame,size=cached.frame,cached.size
                     if not frame or not size then return end
                     local p=frame.Position
                     if not finite(p.X) or not finite(p.Y) or not finite(p.Z) then return end
@@ -1894,14 +1900,14 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
                     local points=geometry.points
                     local delta=cameraPosition-p
                     local view={X=delta.X*right.X+delta.Y*right.Y+delta.Z*right.Z,Y=delta.X*up.X+delta.Y*up.Y+delta.Z*up.Z,Z=-(delta.X*look.X+delta.Y*look.Y+delta.Z*look.Z)}
-                    return {entry=e,points=points,faces={view.X<0 and 1 or 2,view.Y<0 and 3 or 4,view.Z<0 and 5 or 6},
+                    return {entry=e,center=p,points=points,faces={view.X<0 and 1 or 2,view.Y<0 and 3 or 4,view.Z<0 and 5 or 6},
                         color=colors[e.category],distance=distance,text=string.format("%s  %dm",names[e.category],math.floor(distance/3.57))}
                 end)
                 if good and target then out[#out+1]=target end
             end
         end
         table.sort(out,function(a,b) return a.distance<b.distance end)
-        while #out>128 do table.remove(out) end
+        while #out>math.clamp(cfg.esp_limit or 128,16,128) do table.remove(out) end
         if not alive() or r.stopped then return end
         r.targets=out
     end
@@ -1909,7 +1915,7 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
     r.connection=run.RenderStepped:Connect(function(dt)
         if r.stopped or not alive() then return end
         elapsed=elapsed+(tonumber(dt) or 1/60)
-        if elapsed<1/30 then return end
+        if elapsed<1/math.clamp(cfg.esp_hz or 30,10,30) then return end
         elapsed=0
         if not cfg.esp_enabled or #r.targets==0 then if r.drawn>0 then r.hideAll() end return end
         local okRender,renderError=pcall(function()
@@ -1920,7 +1926,9 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
                         local slot=r.pool[used+1]
                         local projected=slot.projected local valid=true local minY=math.huge local sumX=0
                         local geometryChanged=false
+                        if t.center then local _,onScreen=WorldToScreen(t.center) if not onScreen then valid=false end end
                         for i,p in ipairs(t.points) do
+                            if not valid then break end
                             local xy,onScreen=WorldToScreen(p)
                             if not onScreen or not finite(xy.X) or not finite(xy.Y) then valid=false break end
                             projected[i]=xy minY=math.min(minY,xy.Y) sumX=sumX+xy.X
@@ -1970,6 +1978,10 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
     return r
 end
 
+state.cfg.ap_enabled=false
+state.cfg.ap_range=10
+state.cfg.esp_hz=20
+state.cfg.esp_limit=64
 state.cfg.esp_names=true
 state.cfg.esp_distance=1500
 state.cfg.esp_opacity=0.18
@@ -1992,6 +2004,117 @@ task.spawn(function()
     visuals.clear()
 end)
 
+
+-- Auto-parry: read replicated melee windup, never modify cooldown state.
+local ap={status="Disabled",inputs=0,errors=0,targets={},rows=nil,scanning=false,nextScan=0}
+state.parry=ap
+local function apThreat(distance,height,facing,view,windup,allowed)
+    return distance>0.1 and distance<=state.cfg.ap_range and math.abs(height)<=5
+        and facing>=0.4 and view>=0.2 and windup==true
+        and type(allowed)=="number" and allowed>=20 and allowed<=40
+end
+local function apRelease()
+    if ap.held then ap.held=false pcall(mouse2release) end
+end
+local function apResolve()
+    if ap.scanning or os.clock()<ap.nextScan then return end
+    ap.scanning=true ap.nextScan=os.clock()+30
+    local characterId=ap.characterId
+    task.spawn(function()
+        local ok,rows=pcall(findgc,"cooldownToken",{isParryOnCooldown="boolean",isParryResolving="boolean"})
+        if state.running and ap.characterId==characterId and state.cfg.ap_enabled then
+            if ok and type(rows)=="table" and #rows==2 then
+                local byKey={} for _,row in ipairs(rows) do
+                    if row.type=="boolean" and type(row.addr)=="number" then byKey[row.key]=row end
+                end
+                if byKey.isParryOnCooldown and byKey.isParryResolving then ap.rows=byKey end
+            end
+            ap.status=ap.rows and "Watching melee windup" or "Waiting for dagger state"
+        end
+        ap.scanning=false
+    end)
+end
+local function apStep()
+    if not state.cfg.ap_enabled then ap.status="Disabled" apRelease() return end
+    if not unsafeOn() then ap.status="Enable Unsafe LuaU" return end
+    local now=os.clock()
+    if now>=(ap.refreshAt or 0) then
+        ap.refreshAt=now+.25
+        local ch=lp.Character local dagger=ch and ch:FindFirstChild("Parrying Dagger")
+        local id=ch and ch.Address local did=dagger and dagger.Address
+        if id~=ap.characterId or did~=ap.daggerId then
+            ap.rows=nil ap.nextScan=0 ap.characterId=id ap.daggerId=did ap.targets={}
+        end
+        ap.character=ch ap.dagger=dagger
+        ap.root=ch and ch:FindFirstChild("HumanoidRootPart")
+        ap.hum=ch and ch:FindFirstChild("Humanoid")
+        ap.interact=ch and ch:FindFirstChild("CheckInterractable")
+        if now>=(ap.playersAt or 0) then
+            ap.playersAt=now+1 local list={}
+            for _,pl in ipairs(Players:GetPlayers()) do
+                if pl.Team and pl.Team.Name=="Killer" then
+                    local c=pl.Character local root=c and c:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local key=tostring(c.Address) local old=ap.targets[key]
+                        list[key]=old or {character=c,root=root,seen=false}
+                    end
+                end
+            end
+            ap.targets=list
+        end
+    end
+    if not ap.dagger or not ap.root or not ap.hum then ap.status="Equip Parrying Dagger" return end
+    if not ap.rows then apResolve() ap.status=ap.scanning and "Resolving dagger state" or "Waiting for dagger state" return end
+    if uiCapture or not isrbxactive() then ap.status="Waiting for game focus" return end
+    local ch=ap.character
+    if ap.hum.Health<ap.hum.MaxHealth*.5 or ch:GetAttribute("Trapped") or ch:GetAttribute("IsCarried") or ch:GetAttribute("IsHooked") then
+        ap.status="Dagger unavailable" return
+    end
+    local motherscript=ap.interact
+    if motherscript then
+        for _,key in ipairs({"action","isVaulting","isRepairing","isHealing","isUnhooking","isExiting"}) do
+            if motherscript:GetAttribute(key)==true then ap.status="Waiting for current action" return end
+        end
+    end
+    local cooldown=memory_read("int",ap.rows.isParryOnCooldown.addr)
+    local resolving=memory_read("int",ap.rows.isParryResolving.addr)
+    if (cooldown~=0 and cooldown~=1) or (resolving~=0 and resolving~=1) then ap.rows=nil return end
+    local ready=cooldown==0 and resolving==0
+    ap.status=ready and "Watching melee windup" or "Dagger cooldown / resolving"
+    local position=ap.root.Position local camera=Workspace.CurrentCamera
+    if not camera then return end
+    local view=camera.CFrame.LookVector
+    for _,target in pairs(ap.targets) do
+        local c=target.character
+        if c.Parent and target.root.Parent then
+            local windup=c:GetAttribute("LowerBodyStabilize")==true
+            local allowed=c:GetAttribute("AC_AllowedSpeed")
+            local active=windup and type(allowed)=="number" and allowed>=20 and allowed<=40
+            if not active then target.seen=false target.started=nil
+            elseif not target.started then target.started=now end
+            if active and not target.seen and now-(target.started or now)<.75 then
+                local delta=position-target.root.Position local dist=delta.Magnitude
+                if dist>.1 and apThreat(dist,delta.Y,target.root.CFrame.LookVector:Dot(delta.Unit),view:Dot(-delta.Unit),windup,allowed)
+                    and not c:GetAttribute("IsStunned") and not c:GetAttribute("IsCarrying") then
+                    if ready and now>=(ap.inputAt or 0) and not ismouse2pressed() then
+                        target.seen=true ap.inputAt=now+.8 ap.held=true
+                        mouse2press() task.wait(.025) apRelease()
+                        ap.inputs=ap.inputs+1 ap.status="Parry input sent" return
+                    end
+                end
+            end
+        end
+    end
+end
+task.spawn(function()
+    while state.running do
+        local ok,err=pcall(apStep)
+        if not ok then apRelease() ap.errors=ap.errors+1 ap.status="Retrying parry read" ap.error=tostring(err) end
+        task.wait(state.cfg.ap_enabled and 1/60 or .2)
+    end
+    apRelease()
+end)
+
 -- JDUI presentation. Gameplay configuration and callbacks remain unchanged.
 local ui = jdFactory() or _G.JDUI
 assert(type(ui)=="table" and ui.AddTab, "JDUI did not return its UI API")
@@ -2004,7 +2127,7 @@ state.stop=function()
     state.running=false uiCapture=false
     if visuals.renderer then visuals.renderer.stop() end
     visuals.clear()
-    fvCancelResolve() scReleaseInput()
+    fvCancelResolve() scReleaseInput() apRelease()
     local restored=fvRestore()
     nativeDestroy(ui)
     if restored and _G.vdHub==state then _G.vdHub=nil end
@@ -2044,6 +2167,11 @@ end
 local function info(panel,title,provider)
     panel:AddDivider({Title=title}) return panel:AddLabel({Title=provider,Tooltip=title,Save=false})
 end
+local parry=main:AddIsland({Title="Auto Parry",Column=1})
+toggle(parry,"Auto Parry","ap_enabled",nil,"Right click on a nearby melee windup. Face the killer.")
+slider(parry,"Parry range","ap_range",4,14,1," studs")
+info(parry,"Parry status",function() return ap.status end)
+info(parry,"Inputs sent",function() return tostring(ap.inputs).." / melee cue tested with Slasher" end)
 local p=main:AddIsland({Title="Auto Pallet",Column=1})
 toggle(p,"Auto Pallet","p_enabled",nil,"Drop when a killer enters the stun zone.")
 slider(p,"Interact radius","interactionRadius",1,30,1," studs")
@@ -2134,6 +2262,8 @@ end)
 
 local vis=ui:AddTab({Title="Visuals",Icon="eye",Columns=1})
 local visGroup=vis:AddIsland({Title="Object ESP / Chams",Column=1})
+slider(visGroup,"Render rate","esp_hz",10,30,5," FPS")
+slider(visGroup,"Object limit","esp_limit",16,128,16,"")
 toggle(visGroup,"Enable object ESP","esp_enabled",function(value) c.esp_enabled=value visuals.changed() end)
 for _,item in ipairs({{"Pallets","pallets"},{"Windows","windows"},{"Generators","generators"},{"Beartraps","beartraps"},{"Pumpkins","pumpkins"}}) do
     local key="esp_"..item[2]
