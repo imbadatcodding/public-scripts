@@ -1,16 +1,5 @@
 --comments made for claude fr fr
 
-
---======================================================================
---  VIOLENCE DISTRICT HUB   (Matcha / Drawing UI)
---  Tabs: Main (all features & collection) | Characters
---  Inventory is a local catalog. It does not grant server ownership.
---  No calibration. Skillcheck rotation offset is derived from the
---  AbsolutePosition binding at read time -- zero setup. Veil prediction
---  follows the current SpearMath analytic trajectory and camera launch.
---  Stop with:  _G.vdHub.stop()
---======================================================================
--- Resolve JDUI before stopping the existing hub, so download failure is recoverable.
 local jdOK,jdSource=pcall(function() return game:HttpGet("https://raw.githubusercontent.com/jdev-studio/jdui/refs/heads/main/JDUI") end)
 assert(jdOK and type(jdSource)=="string","Unable to download JDUI: "..tostring(jdSource))
 local jdFactory,jdError=loadstring(jdSource)
