@@ -1,4 +1,4 @@
---comments are for claude fixed beartrap skillcheck and other stuff
+--comments made for claude fr fr
 
 
 --======================================================================
@@ -6,8 +6,8 @@
 --  Tabs: Main (all features & collection) | Characters
 --  Inventory is a local catalog. It does not grant server ownership.
 --  No calibration. Skillcheck rotation offset is derived from the
---  AbsolutePosition binding at read time -- zero setup. The Veil aimbot
---  measures the projectile's gravity multiplier off your own throws.
+--  AbsolutePosition binding at read time -- zero setup. Veil prediction
+--  follows the current SpearMath analytic trajectory and camera launch.
 --  Stop with:  _G.vdHub.stop()
 --======================================================================
 -- Resolve JDUI before stopping the existing hub, so download failure is recoverable.
@@ -36,7 +36,7 @@ local mouse       = lp:GetMouse()
 --======================================================================
 local state = {
     running = true,
-    version = "2026-10-27.2-beartrap",
+    version = "2026-10-27.3-veil",
     tab     = "main",
     cfg = {
         -- auto pallet
@@ -1093,24 +1093,9 @@ end)
 
 --======================================================================
 --  VEIL SPEAR AIMBOT
---
---  Everything here is derived from the game's own two scripts, not probed:
---
---   Workspace.<killer>.Animations  (the throw)
---     line 308:  Spearthrow:FireServer(cam.CFrame.LookVector, speed,
---                                      cam.CFrame.Position)
---     The DIRECTION is a client argument. Point the camera and the spear
---     goes there -- no state is faked, the server resolves the hit itself.
---     lines 285-297 give speed purely from hold time; line ~400 auto-
---     releases at 7s; a 165 throw starts a 30s move cooldown.
---
---   PlayerScripts.Mechanics.Veil.ProjectileHandler  (the flight)
---     lines 36-45:  v += (0, -g*dt*GMult, 0);  p += v*dt   on Heartbeat
---     line 65:      origin = HRP.Position + HRP.LookVector*3 + (0,1.5,0)
---
---  So the aim is a boundary-value problem: fixed launch speed, known
---  gravity, solve the launch angle that puts the spear where the target
---  will BE, against the discrete integrator the game actually runs.
+--  Current SpearMath: speed clamp(hold*180,1,180), minimum hold .3s,
+--  analytic gravity (0,-98.1,0), camera origin + direction*3.
+--  Animations samples camera direction after ThrowStartDelay (.01s).
 --======================================================================
 
 -- The camera's rotation matrix. Camera.CFrame is READ-ONLY through the
@@ -1188,19 +1173,6 @@ local function vaWriteLook(addr, f)
     return ok
 end
 
--- workspace.Gravity reads nil in Matcha (unsupported binding). It lives at
--- Workspace+0x9C8 -- verified as the single float/double hit across 0..0x1200.
--- Validated per read so a moved offset falls back instead of poisoning the solve.
-local VA_G_DEFAULT = 196.2
-local function vaBaseG()
-    local a = Workspace.Address
-    if a then
-        local g = rdf(a + 0x9C8)
-        if g and g > 20 and g < 2000 then return g end
-    end
-    return VA_G_DEFAULT
-end
-
 -- The game's Heartbeat step. Only used for the discrete-drop correction.
 local VA_DT = 1 / 60
 
@@ -1209,7 +1181,7 @@ local vaStat = {
     solved = false, tier = nil, cd = 0, drop = nil,
     measG = nil, measN = 0, gmult = nil, charging = false, addr = false,
 }
-local vaCdUntil = 0
+state.veil = vaStat
 
 --  Closed form for a fixed launch speed: solve for tan(theta) from
 --    y = x*tan - g*x^2 / (2*s^2*cos^2)   ->   quadratic in tan
@@ -1267,12 +1239,28 @@ local function vaIntercept(o, tp, tv, s, g, euler)
     return dir, ft
 end
 
--- Speed the spear will leave at for a given hold, mirroring Animations 285-297
--- including the 30s lockout that follows a charged (165) throw.
+-- Current SpearMath.power; piercing changes penetration, not launch speed.
 local function vaSpeedFor(hold, now)
-    if hold >= 2 and now >= vaCdUntil then return 165, "CHARGED" end
-    if hold >= 1 then return 142.5, "FULL" end
-    return math.max(hold * 150, 1), "PARTIAL"
+    local charge = math.max(hold, 0.3)
+    return math.clamp(charge * 180, 1, 180), charge >= 1 and "FULL" or "PARTIAL"
+end
+
+-- Spawn offset follows the final launch direction, not the character facing.
+local function vaLaunchIntercept(camera, tp, tv, speed)
+    local dir, ft = vaIntercept(camera, tp, tv, speed, 98.1, false)
+    if not dir then return nil end
+    for _ = 1, 8 do
+        local origin = camera + dir * 3
+        local nextDir, nextTime = vaIntercept(origin, tp, tv, speed, 98.1, false)
+        if not nextDir then return nil end
+        local delta = (nextDir - dir).Magnitude
+        dir, ft = nextDir, nextTime
+        if delta < 0.00001 then break end
+    end
+    local hit = camera + dir * (3 + speed * ft) + Vector3.new(0, -49.05 * ft * ft, 0)
+    local target = tv and tp + tv * ft or tp
+    if (hit - target).Magnitude > 0.25 then return nil end
+    return dir, ft
 end
 
 --  Target tracking. Velocity is differenced from position history rather than
@@ -1282,7 +1270,7 @@ local vaHist = {}
 
 local function vaTrack(key, pos, now)
     local h = vaHist[key]
-    if not h then
+    if not h or now - h.t > 0.3 or (pos - h.p).Magnitude > 30 then
         vaHist[key] = { p = pos, t = now, v = Vector3.new(0, 0, 0) }
         return Vector3.new(0, 0, 0)
     end
@@ -1340,69 +1328,13 @@ local function vaLineOfSight(o, p, myChar, theirChar)
 end
 
 --======================================================================
---  ARC MEASUREMENT  (turns real throws into a calibrated GMult)
---
---  GMult is chosen server-side per throw and handed to the client only as a
---  `visualize` argument -- and RemoteEvent.OnClientEvent is nil in Matcha, so
---  it cannot be intercepted. But the client's own projectile is integrated
---  with that exact GMult, so watching one flight measures it directly.
---
---  y_n under the discrete scheme is
---     y0 + v0*t - 0.5*g*t^2 - 0.5*g*dt*t
---  which is an exact quadratic in t whose curvature is -0.5*g. So a plain
---  least-squares quadratic recovers g*GMult unbiased -- the half-step bias
---  lands entirely in the linear term.
---======================================================================
-local vaFit = nil
-
-local function vaFitReset() vaFit = nil end
-
-local function vaFitPush(t, y)
-    if not vaFit then
-        vaFit = { n = 0, t0 = t, s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, y0 = 0, y1 = 0, y2 = 0 }
-    end
-    local f = vaFit
-    local x  = t - f.t0
-    local x2 = x * x
-    f.n  = f.n + 1
-    f.s0 = f.s0 + 1
-    f.s1 = f.s1 + x
-    f.s2 = f.s2 + x2
-    f.s3 = f.s3 + x2 * x
-    f.s4 = f.s4 + x2 * x2
-    f.y0 = f.y0 + y
-    f.y1 = f.y1 + y * x
-    f.y2 = f.y2 + y * x2
-    f.span = x
-end
-
--- returns measured downward accel, or nil
-local function vaFitSolve()
-    local f = vaFit
-    if not f or f.n < 8 or (f.span or 0) < 0.12 then return nil end
-    local a11, a12, a13 = f.s0, f.s1, f.s2
-    local a21, a22, a23 = f.s1, f.s2, f.s3
-    local a31, a32, a33 = f.s2, f.s3, f.s4
-    local function det3(b11,b12,b13, b21,b22,b23, b31,b32,b33)
-        return b11*(b22*b33 - b23*b32) - b12*(b21*b33 - b23*b31) + b13*(b21*b32 - b22*b31)
-    end
-    local D = det3(a11,a12,a13, a21,a22,a23, a31,a32,a33)
-    if math.abs(D) < 1e-12 then return nil end
-    -- only the quadratic coefficient is needed: c2 = -0.5*g
-    local D2 = det3(a11,a12,f.y0, a21,a22,f.y1, a31,a32,f.y2)
-    local c2 = D2 / D
-    local g = -2 * c2
-    if g < 20 or g > 3000 then return nil end
-    return g
-end
-
---======================================================================
 --  DRIVER
 --======================================================================
 task.spawn(function()
     local gateAt, isKiller, spearmode = 0, false, false
     local myChar, myHum = nil, nil
     local pressT, wasDown, releaseArmed = nil, false, false
+    local releaseUntil, releaseHold = 0, 0
     local prevProj = false
     local lastT, lockName = nil, nil
 
@@ -1442,61 +1374,28 @@ task.spawn(function()
         -- Presses that started on the hub's own panel are ignored.
         --------------------------------------------------------------
         local down = false
-        if not uiCapture then
+        if not uiCapture and isKiller and spearmode and isrbxactive() then
             local okm, v = pcall(ismouse1pressed)
             down = okm and v and true or false
         end
         if down and not wasDown then
-            pressT, releaseArmed = now, true
+            pressT, releaseArmed, releaseUntil = now, true, 0
         elseif (not down) and wasDown and releaseArmed then
-            -- mirror the 30s lockout a charged throw starts
             local held = pressT and (now - pressT) or 0
-            if held >= 2 and now >= vaCdUntil then vaCdUntil = now + 30 end
+            releaseHold = math.max(held, 0.3)
+            releaseUntil = now + math.max(0, 0.3 - held) + 0.01 + 1 / 60
             pressT, releaseArmed = nil, false
         end
         wasDown = down
-        local hold = pressT and math.min(now - pressT, 7) or 0
-        vaStat.hold     = hold
-        vaStat.cd       = math.max(0, vaCdUntil - now)
-        vaStat.charging = (pressT ~= nil)
-
-        --------------------------------------------------------------
-        -- arc measurement: sample the live projectile while it exists
-        --------------------------------------------------------------
-        if c.va_autocal or true then
-            local proj = nil
-            pcall(function() proj = Workspace:FindFirstChild("Spearprojectile") end)
-            if proj then
-                if not prevProj then vaFitReset() end
-                prevProj = true
-                pcall(function()
-                    local pp = proj.PrimaryPart or proj:FindFirstChild("Spear1")
-                    if pp then vaFitPush(now, pp.Position.Y) end
-                end)
-            elseif prevProj then
-                prevProj = false
-                local g = vaFitSolve()
-                if g then
-                    local base = vaBaseG()
-                    vaStat.measG = g
-                    vaStat.measN = (vaStat.measN or 0) + 1
-                    vaStat.gmult = g / base
-                    if c.va_autocal then
-                        -- snap on the first arc of a session, then EMA so one
-                        -- bad fit can't wrench the aim
-                        local cur = c.va_gmult or 1
-                        local w = ((vaStat.measN or 0) <= 1) and 1 or 0.6
-                        c.va_gmult = cur + (vaStat.gmult - cur) * w
-                    end
-                end
-                vaFitReset()
-            end
-        end
+        local releasing = now < releaseUntil
+        local hold = pressT and (now - pressT) or (releasing and releaseHold or 0)
+        vaStat.hold, vaStat.cd = hold, 0
+        vaStat.charging = pressT ~= nil or releasing
 
         --------------------------------------------------------------
         -- aim
         --------------------------------------------------------------
-        local armed = c.va_enabled and isKiller and spearmode and unsafeOn()
+        local armed = c.va_enabled and isKiller and (spearmode or releasing) and unsafeOn() and not uiCapture and isrbxactive()
         if armed and c.va_holdOnly and not vaStat.charging then armed = false end
 
         if not armed then
@@ -1509,21 +1408,14 @@ task.spawn(function()
             local cam = Workspace.CurrentCamera
             local hrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
             if addr and cam and hrp then
-                local okAim = pcall(function()
+                local okAim, aimError = pcall(function()
                     local ccf  = cam.CFrame
                     local look = ccf.LookVector
                     local hcf  = hrp.CFrame
 
-                    -- launch origin
-                    local origin
-                    if c.va_originCam then
-                        origin = ccf.Position
-                    else
-                        origin = hcf.Position + hcf.LookVector * 3 + Vector3.new(0, 1.5, 0)
-                    end
-
+                    local origin = ccf.Position
                     local speed, tier = vaSpeedFor(hold, now)
-                    local g = vaBaseG() * (c.va_gmult or 1)
+                    local g = 98.1
                     local cosFov = math.cos(math.rad(c.va_fov))
 
                     --------------------------------------------------
@@ -1561,7 +1453,7 @@ task.spawn(function()
                                         if dot >= cosFov
                                            and ((not best or dist < bestDist) or isHeld) then
                                             local tv = c.va_lead and vaTrack(pl.Name, thr.Position, now) or nil
-                                            local dir, ft = vaIntercept(origin, tp, tv, speed, g, c.va_euler)
+                                            local dir, ft = vaLaunchIntercept(origin, tp, tv, speed)
                                             if dir and ((not c.va_los)
                                                 or vaLineOfSight(origin, tp, myChar, ch)) then
                                                 if isHeld then
@@ -1594,7 +1486,7 @@ task.spawn(function()
                     vaStat.flight = bestFt
                     vaStat.solved = bestSol ~= nil
                     -- how far above the straight line we are holding, in studs
-                    vaStat.drop = bestFt and (0.5 * g * bestFt * bestFt + 0.5 * g * VA_DT * bestFt) or nil
+                    vaStat.drop = bestFt and (0.5 * g * bestFt * bestFt) or nil
 
                     if bestSol then
                         local want = bestSol
@@ -1614,6 +1506,7 @@ task.spawn(function()
                         vaWriteLook(addr, want)
                     end
                 end)
+                vaStat.error = not okAim and tostring(aimError) or nil
                 if not okAim then vaStat.solved = false end
             else
                 vaStat.solved = false
@@ -2192,13 +2085,13 @@ toggle(va,"Veil Spear Aimbot","va_enabled")
 slider(va,"Field of view","va_fov",5,90,5," deg")
 slider(va,"Range","va_range",40,400,20," studs")
 slider(va,"Smoothing","va_smooth",1,20,1)
-for _,v in ipairs({{"Lead target","va_lead"},{"Euler fix","va_euler"},{"Line of sight","va_los"},
- {"Auto-calibration","va_autocal"},{"Charge only","va_holdOnly"},{"Camera origin","va_originCam"},{"Sticky aim","va_sticky"}}) do toggle(va,v[1],v[2]) end
+for _,v in ipairs({{"Lead target","va_lead"},{"Line of sight","va_los"},
+ {"Charge only","va_holdOnly"},{"Sticky aim","va_sticky"}}) do toggle(va,v[1],v[2]) end
 info(va,"Target",function() return (vaStat.target or "--")..(vaStat.held and " / LOCK" or "") end)
 info(va,"Distance / launch speed",function() return string.format("%.0f / %.1f",vaStat.dist or 0,vaStat.speed or 0) end)
 info(va,"Charge",function() return string.format("%.2fs / %s",vaStat.hold or 0,vaStat.tier or "--") end)
 info(va,"Flight / drop",function() return string.format("%.2fs / %.1f",vaStat.flight or 0,vaStat.drop or 0) end)
-info(va,"Gravity / measured arcs",function() return string.format("%.3f / %d",c.va_gmult,vaStat.measN or 0) end)
+info(va,"Projectile model",function() return "180 speed / 98.1 gravity / camera launch" end)
 info(va,"Aim status",function()
  if vaStat.losOK==false then return "Line of sight unavailable" end
  if vaStat.cd and vaStat.cd>0.5 then return string.format("Charged throw cooldown: %.0fs",vaStat.cd) end
@@ -2317,7 +2210,7 @@ state.debug = function()
         fv          = fvStat,
         veil        = vaStat,
         camAddr     = vaRot,
-        baseG       = vaBaseG(),
+        baseG       = 98.1,
         theme       = ui.Theme,
     }
 end
