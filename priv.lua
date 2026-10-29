@@ -25,7 +25,7 @@ local mouse       = lp:GetMouse()
 --======================================================================
 local state = {
     running = true,
-    version = "2026-10-29.3-lunge-approach",
+    version = "2026-10-29.4-pallet-rounds",
     tab     = "main",
     cfg = {
         -- auto pallet
@@ -214,7 +214,23 @@ local function refreshPallets()
     local out, byParent, blocks, vaultPts = {}, {}, {}, {}
     local map = Workspace:FindFirstChild("Map")
     if not map then pallets = {} blockers = {} vaults = {} return end
-    for _, d in ipairs(map:GetDescendants()) do
+    -- Yield between small batches instead of one synchronous full-map scan.
+    local nodes={} local queue={map} local first=1 local slice=os.clock()
+    while first<=#queue do
+        if not state.running then return false end
+        local parent=queue[first] first=first+1
+        for _,child in ipairs(parent:GetChildren()) do
+            nodes[#nodes+1]=child
+            local class=child.ClassName
+            if class=="Model" or class=="Folder" or class=="Part" or class=="MeshPart" or class=="UnionOperation" then queue[#queue+1]=child end
+        end
+        if first%50==0 or os.clock()-slice>.002 then task.wait() slice=os.clock() end
+    end
+    for i, d in ipairs(nodes) do
+        if i%100==0 or os.clock()-slice>.002 then
+            task.wait() slice=os.clock()
+            if not state.running then return false end
+        end
         local nm = d.Name
         if nm == "PalletPoint" and d.ClassName == "Part" then
             local par = d.Parent
@@ -274,9 +290,6 @@ local function refreshPallets()
             end
         end
     end
-    pallets = out
-    blockers = blocks
-    vaults   = vaultPts
     -- precompute each board's half-extents and which margin applies per axis
     for _, e in ipairs(out) do
         local ok, s = pcall(function() return e.board.Size end)
@@ -290,6 +303,14 @@ local function refreshPallets()
             e.ax = { n[1]*0.5, n[2]*0.5, n[3]*0.5, slot[1], slot[2], slot[3] }
         end
     end
+    local current=Workspace:FindFirstChild("Map")
+    if not state.running or not current or current.Address~=map.Address then return false end
+    for _,entry in ipairs(out) do
+        if not entry.board.Parent or not entry.board:IsDescendantOf(map) then return false end
+    end
+    pallets,blockers,vaults=out,blocks,vaultPts
+    return true
+
 end
 
 -- Players:GetPlayers() is not always resolvable on this VM (the binding can go
@@ -380,43 +401,56 @@ local function refreshKiller()
     if pStat.killD and pStat.killD > 200 then pStat.killD = nil end
 end
 
--- collectors (slow)
--- NOTE: there is deliberately NO periodic pallet rescan. Pallets do not move
--- mid-round, so the ~120ms Map:GetDescendants() runs ONCE per round, driven by
--- the round watcher below. Re-scanning on a timer was pure overhead.
-
--- ROUND WATCHER
--- Map's contents are wiped and repopulated on every round start (the Folder
--- itself may or may not be reused). Holding pallets from the previous round
--- means reading destroyed instances, so drop the list the moment the map
--- clears and rebuild it as soon as the new one is in.
--- Cheap by design: FindFirstChild + one child-count read, nothing recursive.
+-- Round-aware auto-drop discovery, independent of ESP.
+local function palletScanPlan(plan,signature,now,enabled)
+    local changed=signature~=plan.signature
+    if changed then
+        plan.signature=signature plan.attempt=0 plan.nextAt=now+1
+    end
+    if not signature then return changed,false end
+    return changed,now>=(plan.nextAt or 0) and ((plan.attempt or 0)<4 or enabled)
+end
+local function palletScanFinished(plan,now,success)
+    if not success then plan.nextAt=now+3 return end
+    plan.attempt=(plan.attempt or 0)+1
+    local delays={2,5,10}
+    plan.nextAt=now+(delays[plan.attempt] or 30)
+end
 task.spawn(function()
-    local lastAddr, lastCount = nil, -1
-    local armed = false          -- true once we've seen the map go empty/new
+    local plan={}
     while state.running do
-        local map   = Workspace:FindFirstChild("Map")
-        local addr  = map and map.Address or nil
-        local count = map and #map:GetChildren() or 0
-
-        if count == 0 then
-            -- between rounds: nothing valid to act on
-            if #pallets > 0 or #blockers > 0 then
-                pallets, blockers, vaults, lastDrop = {}, {}, {}, {}
+        local ok,err=pcall(function()
+            local map=Workspace:FindFirstChild("Map")
+            local children=map and map:GetChildren() or {}
+            local signature=nil
+            if #children>0 then
+                local ids={}
+                for _,child in ipairs(children) do
+                    ids[#ids+1]=tostring(child.Address)
+                    if string.lower(child.Name or ""):find("pallet",1,true) then
+                        for _,p in ipairs(child:GetChildren()) do ids[#ids+1]=tostring(p.Address) end
+                    end
+                end
+                table.sort(ids)
+                local ch=lp.Character
+                signature=tostring(map.Address)..":"..tostring(ch and ch.Address)..":"..table.concat(ids,",")
             end
-            armed = true
-        elseif addr ~= lastAddr or lastCount <= 0 or armed then
-            -- new map instance, or the old one just repopulated -> round start
-            pallets, blockers, vaults, lastDrop = {}, {}, {}, {}
-            task.wait(1)               -- let the map finish streaming in
-            pcall(refreshPallets)
-            armed = false
-        end
-
-        lastAddr, lastCount = addr, count
+            local changed,scan=palletScanPlan(plan,signature,os.clock(),state.cfg.p_enabled or state.cfg.fv_enabled)
+            if changed then pallets,blockers,vaults,lastDrop={},{},{},{} end
+            if scan then
+                pStat.scanning=true
+                local scanned,result=pcall(refreshPallets)
+                pStat.scanning=false
+                if scanned and result==true then pStat.scanError=nil
+                else pStat.scanError=scanned and "Map changed; retrying" or tostring(result) end
+                palletScanFinished(plan,os.clock(),scanned and result==true)
+            end
+        end)
+        if not ok then pStat.scanning=false pStat.scanError=tostring(err) end
         task.wait(1)
     end
 end)
+
 task.spawn(function()
     while state.running do
         if state.cfg.p_enabled then pcall(refreshKiller) end
@@ -2250,6 +2284,7 @@ info(p,"Pallet status",function()
 end)
 info(p,"Drop key: SPACE",function() return pStat.hp==false and "Health must be above 50." or
  string.format("At pallet: %s / Distance: %s",pStat.elig and "YES" or "--",pStat.nearD and string.format("%.1f",pStat.nearD) or "--") end)
+info(p,"Pallet discovery",function() return pStat.scanError or (pStat.scanning and "Refreshing map..." or "Tracks round changes and late-loaded pallets") end)
 local sc=main:AddIsland({Title="Skillchecks",Column=2})
 toggle(sc,"Auto Skillcheck","sc_enabled")
 slider(sc,"Timing lead","sc_lead",0,10,1," deg")
