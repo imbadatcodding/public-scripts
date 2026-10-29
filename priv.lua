@@ -25,7 +25,7 @@ local mouse       = lp:GetMouse()
 --======================================================================
 local state = {
     running = true,
-    version = "2026-10-28.1-parry",
+    version = "2026-10-29.3-lunge-approach",
     tab     = "main",
     cfg = {
         -- auto pallet
@@ -419,7 +419,7 @@ task.spawn(function()
 end)
 task.spawn(function()
     while state.running do
-        pcall(refreshKiller)   -- never let one bad frame kill the collector
+        if state.cfg.p_enabled then pcall(refreshKiller) end
         task.wait(0.5)
     end
 end)
@@ -528,7 +528,7 @@ task.spawn(function()
         -- could plausibly matter this round.
         local nd = nearD and math.sqrt(nearD) or nil
         pStat.nearD = (nd and nd <= 200) and nd or nil
-        task.wait(1 / state.cfg.hz)
+        task.wait(state.cfg.p_enabled and 1 / state.cfg.hz or .25)
     end
 end)
 
@@ -1033,6 +1033,7 @@ end
 task.spawn(function()
     while state.running do
         local ok, err = pcall(function()
+            if not state.cfg.fv_enabled and not fvHasWrites() then fvStat.status="Disabled" return end
             local id = fvObserveVault()
             fvSetEnabled(state.cfg.fv_enabled)
             if not state.cfg.fv_enabled then
@@ -1329,6 +1330,12 @@ task.spawn(function()
 
     while state.running do
         local c   = state.cfg
+        if not c.va_enabled then
+            pressT,wasDown,releaseArmed,releaseUntil=nil,false,false,0
+            vaStat.charging,vaStat.solved,vaStat.target=false,false,nil
+            task.wait(.25)
+            continue
+        end
         local now = os.clock()
         -- Real frame delta. Smoothing needs this to be a time constant rather than
         -- a per-iteration fraction, or its feel changes with the loop rate. Clamped
@@ -1980,6 +1987,7 @@ end
 
 state.cfg.ap_enabled=false
 state.cfg.ap_range=10
+state.cfg.ap_lead=.08
 state.cfg.esp_hz=20
 state.cfg.esp_limit=64
 state.cfg.esp_names=true
@@ -2013,6 +2021,33 @@ local function apThreat(distance,height,facing,view,windup,allowed)
         and facing>=0.4 and view>=0.2 and windup==true
         and type(allowed)=="number" and allowed>=20 and allowed<=40
 end
+-- Arm on windup, fire near automatic release or when an early release is observed.
+-- Replicated movement cues are approximate; do not treat them as animation markers.
+local function apAttackPhase(t,now,active,maxHold,lead)
+    if active and not t.active then
+        t.started=now t.releaseAt=nil t.seen=false
+    elseif not active and t.active then
+        t.releaseAt=t.started and now-t.started<=maxHold+.25 and now or nil
+    end
+    t.active=active
+    if t.seen then return false end
+    if active and t.started then
+        local elapsed=now-t.started
+        return elapsed>=math.max(.05,maxHold-lead) and elapsed<=maxHold+.2
+    end
+    return t.releaseAt~=nil and now-t.releaseAt<=.12
+end
+local function apContactPhase(t,now,distance,active,maxHold,lead)
+    local closing=0
+    local dt=t.distanceAt and now-t.distanceAt
+    if dt and dt>=.01 and dt<=.25 and t.lastDistance then
+        closing=math.clamp((t.lastDistance-distance)/dt,0,35)
+    end
+    t.lastDistance,t.distanceAt=distance,now
+    local reach=6.5+closing*math.clamp(lead,0,.2)
+    return active and not t.seen and t.started~=nil
+        and now-t.started<=maxHold+.2 and distance<=reach
+end
 local function apRelease()
     if ap.held then ap.held=false pcall(mouse2release) end
 end
@@ -2039,11 +2074,11 @@ local function apStep()
     if not unsafeOn() then ap.status="Enable Unsafe LuaU" return end
     local now=os.clock()
     if now>=(ap.refreshAt or 0) then
-        ap.refreshAt=now+.25
+        ap.refreshAt=now+.5
         local ch=lp.Character local dagger=ch and ch:FindFirstChild("Parrying Dagger")
         local id=ch and ch.Address local did=dagger and dagger.Address
         if id~=ap.characterId or did~=ap.daggerId then
-            ap.rows=nil ap.nextScan=0 ap.characterId=id ap.daggerId=did ap.targets={}
+            ap.rows=nil ap.nextScan=0 ap.readyAt=0 ap.ready=false ap.characterId=id ap.daggerId=did ap.targets={} ap.landsBaseline=nil
         end
         ap.character=ch ap.dagger=dagger
         ap.root=ch and ch:FindFirstChild("HumanoidRootPart")
@@ -2057,6 +2092,7 @@ local function apStep()
                     if root then
                         local key=tostring(c.Address) local old=ap.targets[key]
                         list[key]=old or {character=c,root=root,seen=false}
+                        list[key].maxHold=.6*math.clamp(tonumber(c:GetAttribute("lungeboost")) or 1,.5,2)
                     end
                 end
             end
@@ -2066,51 +2102,79 @@ local function apStep()
     if not ap.dagger or not ap.root or not ap.hum then ap.status="Equip Parrying Dagger" return end
     if not ap.rows then apResolve() ap.status=ap.scanning and "Resolving dagger state" or "Waiting for dagger state" return end
     if uiCapture or not isrbxactive() then ap.status="Waiting for game focus" return end
-    local ch=ap.character
-    if ap.hum.Health<ap.hum.MaxHealth*.5 or ch:GetAttribute("Trapped") or ch:GetAttribute("IsCarried") or ch:GetAttribute("IsHooked") then
-        ap.status="Dagger unavailable" return
-    end
-    local motherscript=ap.interact
-    if motherscript then
-        for _,key in ipairs({"action","isVaulting","isRepairing","isHealing","isUnhooking","isExiting"}) do
-            if motherscript:GetAttribute(key)==true then ap.status="Waiting for current action" return end
+    -- Read local readiness at 5 Hz; do no threat work on cooldown or while busy.
+    if now >= (ap.readyAt or 0) then
+        ap.readyAt=now+.2
+        local ch=ap.character
+        local lands=ch:GetAttribute("ParryLands")
+        if type(lands)=="number" then
+            if ap.landsBaseline and lands>ap.landsBaseline then ap.blocks=(ap.blocks or 0)+lands-ap.landsBaseline end
+            ap.landsBaseline=lands
+        elseif ap.landsBaseline==nil then ap.landsBaseline=0 end
+        ap.ready=false
+        local cooldown=memory_read("int",ap.rows.isParryOnCooldown.addr)
+        local resolving=memory_read("int",ap.rows.isParryResolving.addr)
+        if (cooldown~=0 and cooldown~=1) or (resolving~=0 and resolving~=1) then ap.rows=nil return end
+        if cooldown~=0 or resolving~=0 then ap.status="Dagger cooldown / resolving"
+        elseif ap.hum.Health<ap.hum.MaxHealth*.5 then
+            ap.status="Requires at least 50% health"
+        elseif ch:GetAttribute("Trapped") or ch:GetAttribute("IsCarried") or ch:GetAttribute("IsHooked") then
+            ap.status="Cannot parry while trapped, carried, or hooked"
+        else
+            local busy=false
+            if ap.interact then
+                for _,key in ipairs({"action","isVaulting","isRepairing","isHealing","isUnhooking","isExiting"}) do
+                    if ap.interact:GetAttribute(key)==true then busy=true break end
+                end
+            end
+            ap.ready=not busy
+            ap.status=busy and "Waiting for current action" or "Watching nearby melee windup"
         end
     end
-    local cooldown=memory_read("int",ap.rows.isParryOnCooldown.addr)
-    local resolving=memory_read("int",ap.rows.isParryResolving.addr)
-    if (cooldown~=0 and cooldown~=1) or (resolving~=0 and resolving~=1) then ap.rows=nil return end
-    local ready=cooldown==0 and resolving==0
-    ap.status=ready and "Watching melee windup" or "Dagger cooldown / resolving"
-    local position=ap.root.Position local camera=Workspace.CurrentCamera
-    if not camera then return end
-    local view=camera.CFrame.LookVector
+    if not ap.ready then ap.delay=.1 return end
+    local position=ap.root.Position
+    local nearby=false
     for _,target in pairs(ap.targets) do
-        local c=target.character
-        if c.Parent and target.root.Parent then
+        local delta=position-target.root.Position
+        local dist=delta.Magnitude
+        if dist>.1 and dist<=state.cfg.ap_range+2 and math.abs(delta.Y)<=5 then
+            nearby=true
+            local c=target.character
             local windup=c:GetAttribute("LowerBodyStabilize")==true
-            local allowed=c:GetAttribute("AC_AllowedSpeed")
+            local allowed=windup and c:GetAttribute("AC_AllowedSpeed") or nil
             local active=windup and type(allowed)=="number" and allowed>=20 and allowed<=40
-            if not active then target.seen=false target.started=nil
-            elseif not target.started then target.started=now end
-            if active and not target.seen and now-(target.started or now)<.75 then
-                local delta=position-target.root.Position local dist=delta.Magnitude
-                if dist>.1 and apThreat(dist,delta.Y,target.root.CFrame.LookVector:Dot(delta.Unit),view:Dot(-delta.Unit),windup,allowed)
-                    and not c:GetAttribute("IsStunned") and not c:GetAttribute("IsCarrying") then
-                    if ready and now>=(ap.inputAt or 0) and not ismouse2pressed() then
-                        target.seen=true ap.inputAt=now+.8 ap.held=true
+            if active and not target.active then ap.windups=(ap.windups or 0)+1 end
+            ap.nearDistance=dist
+            local phase=apAttackPhase(target,now,active,target.maxHold or .6,state.cfg.ap_lead or .08)
+            -- At contact distance the delayed release heuristic is too late.
+            local closeWindup=apContactPhase(target,now,dist,active,target.maxHold or .6,state.cfg.ap_lead or .08)
+            phase=phase or closeWindup
+            if phase and now>=(ap.inputAt or 0) then
+                local camera=Workspace.CurrentCamera
+                if camera and apThreat(dist,delta.Y,target.root.CFrame.LookVector:Dot(delta.Unit),camera.CFrame.LookVector:Dot(-delta.Unit),true,27)
+                    and not c:GetAttribute("IsStunned") and not c:GetAttribute("IsCarrying") and not ismouse2pressed() then
+                    -- Recheck immediately before input; cached readiness cannot bypass cooldown.
+                    if memory_read("int",ap.rows.isParryOnCooldown.addr)==0 and memory_read("int",ap.rows.isParryResolving.addr)==0 then
+                        target.seen=true ap.inputAt=now+.8 ap.readyAt=0 ap.ready=false ap.held=true
                         mouse2press() task.wait(.025) apRelease()
-                        ap.inputs=ap.inputs+1 ap.status="Parry input sent" return
+                        ap.inputs=ap.inputs+1 ap.status="Parry input sent" ap.delay=.1 return
                     end
                 end
             end
+        else
+            target.seen=false target.started=nil target.active=false target.releaseAt=nil target.lastDistance=nil target.distanceAt=nil
         end
     end
+    ap.delay=nearby and 1/30 or .1
+
 end
 task.spawn(function()
     while state.running do
+        local start=os.clock()
         local ok,err=pcall(apStep)
+        ap.stepMs=(os.clock()-start)*1000
         if not ok then apRelease() ap.errors=ap.errors+1 ap.status="Retrying parry read" ap.error=tostring(err) end
-        task.wait(state.cfg.ap_enabled and 1/60 or .2)
+        task.wait(state.cfg.ap_enabled and (ap.delay or .1) or .3)
     end
     apRelease()
 end)
@@ -2170,8 +2234,11 @@ end
 local parry=main:AddIsland({Title="Auto Parry",Column=1})
 toggle(parry,"Auto Parry","ap_enabled",nil,"Right click on a nearby melee windup. Face the killer.")
 slider(parry,"Parry range","ap_range",4,14,1," studs")
+slider(parry,"Windup lead","ap_lead",0,.2,.01," s")
 info(parry,"Parry status",function() return ap.status end)
-info(parry,"Inputs sent",function() return tostring(ap.inputs).." / melee cue tested with Slasher" end)
+info(parry,"Inputs / confirmed blocks",function() return tostring(ap.inputs).." / "..tostring(ap.blocks or 0) end)
+info(parry,"Detection",function() return string.format("%d windups / nearest %.1f studs",ap.windups or 0,ap.nearDistance or 0) end)
+info(parry,"Timing",function() return "Experimental: approaching lunge / held release." end)
 local p=main:AddIsland({Title="Auto Pallet",Column=1})
 toggle(p,"Auto Pallet","p_enabled",nil,"Drop when a killer enters the stun zone.")
 slider(p,"Interact radius","interactionRadius",1,30,1," studs")
