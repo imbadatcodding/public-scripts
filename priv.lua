@@ -25,7 +25,7 @@ local mouse       = lp:GetMouse()
 --======================================================================
 local state = {
     running = true,
-    version = "2026-10-29.4-pallet-rounds",
+    version = "2026-10-31.10-esp-fps-controls",
     tab     = "main",
     cfg = {
         -- auto pallet
@@ -77,6 +77,7 @@ local state = {
         --   flight is least-squares fitted for vertical accel and folded back
         --   into va_gmult.
         va_enabled       = false,
+        va_guide         = false,       -- draw the solution without steering
         va_fov           = 55,          -- max degrees off your crosshair to consider a target
         va_range         = 260,         -- studs
         va_smooth        = 1,           -- 1 = snap. Values ABOVE 1 are a real TIME
@@ -622,7 +623,7 @@ end
 
 -- Separate sampling from input so a reset, chained goal, or held physical key
 -- cannot produce repeated presses. A stationary/hidden needle never arms.
-local function scAdvance(t, lr, gr, now, lead)
+local function scAdvance(t, lr, gr, now, lead, allowNeutral)
     local previous = t.line
     local reset = t.goal == nil or math.abs(gr - t.goal) > 0.5
         or (previous ~= nil and lr < previous - 2)
@@ -650,9 +651,14 @@ local function scAdvance(t, lr, gr, now, lead)
     local lo, hi = gr + 102, gr + 116
     local threshold = math.clamp(gr + 109 - math.clamp(lead or 0, 0, 10)
         - (t.rate or 0) / 120, lo + 0.25, hi - 0.25)
-    local missed = active and not t.fired and not t.missed and lr > hi
+    -- Save a delayed normal check in its verified neutral window.
+    -- Trap checks retain their narrower, separately verified window.
+    local deadline = allowNeutral and (gr + 159) or hi
+    local inputMargin = math.clamp((t.rate or 0) / 60, 1, 12)
+    local latest = allowNeutral and (deadline - inputMargin) or hi
+    local missed = active and not t.fired and not t.missed and lr > deadline
     if missed then t.missed = true end
-    return active and not t.fired and lr >= threshold and lr <= hi, newCheck, missed, lo, hi
+    return active and not t.fired and lr >= threshold and lr <= latest, newCheck, missed, lo, hi
 end
 
 local SC_KEYS = {
@@ -796,7 +802,7 @@ local function scStep()
         scStat.status = "Refreshing GUI layout"
         return
     end
-    local fire, newCheck, missed, lo, hi = scAdvance(scTrack, lr, gr, now, c.sc_lead)
+    local fire, newCheck, missed, lo, hi = scAdvance(scTrack, lr, gr, now, c.sc_lead, not scGui.trapped)
     scLast.l, scLast.g = lr, gr
     scLast.win = string.format("%.0f..%.0f", lo, hi)
     if newCheck then scChecks = scChecks + 1 end
@@ -1354,6 +1360,51 @@ end
 --======================================================================
 --  DRIVER
 --======================================================================
+-- Three reusable objects; projection only runs in the render callback.
+local vaGuide = { point=nil, updated=0, visible=false, elapsed=0 }
+local function vaGuideVisible(show)
+    if vaGuide.visible == show then return end
+    vaGuide.visible=show
+    if vaGuide.objects then
+        for _, d in ipairs(vaGuide.objects) do d.Visible=show end
+    end
+end
+local function vaGuideStop()
+    if vaGuide.connection then vaGuide.connection:Disconnect() vaGuide.connection=nil end
+    if vaGuide.objects then
+        for _,d in ipairs(vaGuide.objects) do d:Remove() end
+        vaGuide.objects=nil
+    end
+    vaGuide.visible=false vaGuide.point=nil
+end
+vaGuide.connection=game:GetService("RunService").RenderStepped:Connect(function(dt)
+    if not state.running or not state.cfg.va_enabled or not state.cfg.va_guide
+        or not vaGuide.point or os.clock()-vaGuide.updated > .15
+        or uiCapture or not isrbxactive() then vaGuideVisible(false) return end
+    vaGuide.elapsed=vaGuide.elapsed+(dt or 0)
+    if vaGuide.elapsed < 1/60 then return end
+    vaGuide.elapsed=0
+    local camera=Workspace.CurrentCamera
+    if not camera then vaGuideVisible(false) return end
+    -- Project the solved direction from the current camera, avoiding translation parallax.
+    local p, visible=WorldToScreen(camera.CFrame.Position + vaGuide.point * 100)
+    if not visible then vaGuideVisible(false) return end
+    if not vaGuide.objects then
+        local ring=Drawing.new("Circle")
+        ring.Radius=19 ring.NumSides=32 ring.Filled=false
+        local a,b=Drawing.new("Line"),Drawing.new("Line")
+        vaGuide.objects={ring,a,b}
+        for _,d in ipairs(vaGuide.objects) do
+            d.Color=Color3.fromRGB(255,230,120) d.Thickness=3 d.ZIndex=50 d.Visible=false
+        end
+    end
+    local d=vaGuide.objects
+    d[1].Position=p
+    d[2].From=Vector2.new(p.X-10,p.Y-10) d[2].To=Vector2.new(p.X+10,p.Y+10)
+    d[3].From=Vector2.new(p.X-10,p.Y+10) d[3].To=Vector2.new(p.X+10,p.Y-10)
+    vaGuideVisible(true)
+end)
+
 task.spawn(function()
     local gateAt, isKiller, spearmode = 0, false, false
     local myChar, myHum = nil, nil
@@ -1365,6 +1416,7 @@ task.spawn(function()
     while state.running do
         local c   = state.cfg
         if not c.va_enabled then
+            vaGuide.point=nil
             pressT,wasDown,releaseArmed,releaseUntil=nil,false,false,0
             vaStat.charging,vaStat.solved,vaStat.target=false,false,nil
             task.wait(.25)
@@ -1425,19 +1477,20 @@ task.spawn(function()
         --------------------------------------------------------------
         -- aim
         --------------------------------------------------------------
-        local armed = c.va_enabled and isKiller and (spearmode or releasing) and unsafeOn() and not uiCapture and isrbxactive()
+        local armed = c.va_enabled and isKiller and (spearmode or releasing) and (c.va_guide or unsafeOn()) and not uiCapture and isrbxactive()
         if armed and c.va_holdOnly and not vaStat.charging then armed = false end
 
         if not armed then
+            vaGuide.point=nil
             vaStat.target, vaStat.solved, vaStat.dist = nil, false, nil
             vaStat.speed, vaStat.flight, vaStat.drop, vaStat.tier = nil, nil, nil, nil
             lockName, vaStat.held = nil, false
         else
-            local addr = vaRotAddr()
+            local addr = not c.va_guide and vaRotAddr() or nil
             vaStat.addr = addr ~= nil
             local cam = Workspace.CurrentCamera
             local hrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            if addr and cam and hrp then
+            if (c.va_guide or addr) and cam and hrp then
                 local okAim, aimError = pcall(function()
                     local ccf  = cam.CFrame
                     local look = ccf.LookVector
@@ -1518,7 +1571,10 @@ task.spawn(function()
                     -- how far above the straight line we are holding, in studs
                     vaStat.drop = bestFt and (0.5 * g * bestFt * bestFt) or nil
 
-                    if bestSol then
+                    if bestSol and c.va_guide then
+                        vaGuide.point=bestSol
+                        vaGuide.updated=now
+                    elseif bestSol then
                         local want = bestSol
                         local sm = c.va_smooth or 1
                         if sm > 1 then
@@ -1534,16 +1590,19 @@ task.spawn(function()
                             if blend.Magnitude > 1e-4 then want = blend.Unit end
                         end
                         vaWriteLook(addr, want)
+                    else
+                        vaGuide.point=nil
                     end
                 end)
                 vaStat.error = not okAim and tostring(aimError) or nil
-                if not okAim then vaStat.solved = false end
+                if not okAim then vaStat.solved = false vaGuide.point=nil end
             else
                 vaStat.solved = false
+                vaGuide.point=nil
             end
         end
 
-        task.wait(1 / 144)
+        task.wait((not isKiller or not (spearmode or releasing)) and .05 or (c.va_guide and 1 / 30 or 1 / 144))
     end
 end)
 
@@ -1815,6 +1874,10 @@ local function createVisuals(ws, cfg, register, alive)
                 local parent=stack[first] first=first+1
                 local seasonal=parent.Name=="Pumpkins" and parent:IsDescendantOf(map)
                 for _,child in ipairs(parent:GetChildren()) do
+                    if v.yield and os.clock()-start>.001 then
+                        v.yield() start=os.clock()
+                        if not alive() or not cfg.esp_enabled then return end
+                    end
                     local class,name=child.ClassName,string.lower(child.Name or "")
                     if seasonal and (class=="Model" or class=="Part" or class=="MeshPart") then
                         -- Preserve anonymous pumpkin models without an ancestry walk on every part.
@@ -1833,7 +1896,7 @@ local function createVisuals(ws, cfg, register, alive)
                         end
                     end
                 end
-                if v.yield and (first%64==0 or os.clock()-start>0.002) then v.yield() start=os.clock() end
+                if v.yield and (first%32==0 or os.clock()-start>0.001) then v.yield() start=os.clock() end
             end
             v.reconcile(found,map)
         end)
@@ -1907,7 +1970,12 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
         local cameraPosition=cf and cf.Position
         if not cameraPosition or not cfg.esp_enabled or not alive() or r.stopped then r.targets={} return end
         local out={}
+        local collectSlice=os.clock()
         for _,e in pairs(v.entries) do
+            if task.wait and os.clock()-collectSlice>.001 then
+                task.wait() collectSlice=os.clock()
+                if not alive() or r.stopped or not cfg.esp_enabled then return end
+            end
             if e.active and cfg["esp_"..e.category] then
                 local good,target=pcall(function()
                     if not e.model.Parent or not e.root.Parent then return end
@@ -1941,7 +2009,7 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
                     local points=geometry.points
                     local delta=cameraPosition-p
                     local view={X=delta.X*right.X+delta.Y*right.Y+delta.Z*right.Z,Y=delta.X*up.X+delta.Y*up.Y+delta.Z*up.Z,Z=-(delta.X*look.X+delta.Y*look.Y+delta.Z*look.Z)}
-                    return {entry=e,center=p,points=points,faces={view.X<0 and 1 or 2,view.Y<0 and 3 or 4,view.Z<0 and 5 or 6},
+                    return {entry=e,center=p,right=right,up=up,look=look,points=points,faces={view.X<0 and 1 or 2,view.Y<0 and 3 or 4,view.Z<0 and 5 or 6},
                         color=colors[e.category],distance=distance,text=string.format("%s  %dm",names[e.category],math.floor(distance/3.57))}
                 end)
                 if good and target then out[#out+1]=target end
@@ -1952,32 +2020,84 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
         if not alive() or r.stopped then return end
         r.targets=out
     end
-    local elapsed=0
+    local projection={}
+    local function project(point)
+        local q=projection
+        local dx,dy,dz=point.X-q.px,point.Y-q.py,point.Z-q.pz
+        local depth=dx*q.fx+dy*q.fy+dz*q.fz
+        if depth<=.01 then return 0,0,false end
+        local x=q.cx+(dx*q.rx+dy*q.ry+dz*q.rz)*q.focal/depth
+        local y=q.cy-(dx*q.ux+dy*q.uy+dz*q.uz)*q.focal/depth
+        return x,y,finite(x) and finite(y) and x>=0 and x<=q.width and y>=0 and y<=q.height
+    end
+    local frameElapsed=0
+    -- A cap never schedules extra callbacks or replays missed frames.
+    local function frameDue(dt)
+        if cfg.esp_auto_fps then frameElapsed=0 return true end
+        local hz=tonumber(cfg.esp_hz) or 60
+        if hz~=hz then hz=60 end
+        local interval=1/math.clamp(hz,10,240)
+        frameElapsed=frameElapsed+math.clamp(tonumber(dt) or 1/60,0,.25)
+        if frameElapsed+1e-7<interval then return false end
+        frameElapsed=math.max(0,frameElapsed-interval)%interval
+        return true
+    end
     r.connection=run.RenderStepped:Connect(function(dt)
         if r.stopped or not alive() then return end
-        elapsed=elapsed+(tonumber(dt) or 1/60)
-        if elapsed<1/math.clamp(cfg.esp_hz or 30,10,30) then return end
-        elapsed=0
-        if not cfg.esp_enabled or #r.targets==0 then if r.drawn>0 then r.hideAll() end return end
+        if not cfg.esp_enabled or #r.targets==0 then frameElapsed=0 if r.drawn>0 then r.hideAll() end return end
+        if not frameDue(dt) then return end
+        local renderStarted=os.clock()
         local okRender,renderError=pcall(function()
             local used=0
+            local camera=ws.CurrentCamera
+            local cameraFrame=camera and camera.CFrame
+            local cameraPosition=cameraFrame and cameraFrame.Position
+            local viewport=camera and camera.ViewportSize
+            local fov=camera and camera.FieldOfView
+            if not cameraFrame or not viewport or viewport.X<=0 or viewport.Y<=0
+                or not finite(fov) or fov<=0 or fov>=180 then r.hideAll() return end
+            local right,up,forward=cameraFrame.RightVector,cameraFrame.UpVector,cameraFrame.LookVector
+            local q=projection
+            q.px,q.py,q.pz=cameraPosition.X,cameraPosition.Y,cameraPosition.Z
+            q.rx,q.ry,q.rz=right.X,right.Y,right.Z
+            q.ux,q.uy,q.uz=up.X,up.Y,up.Z
+            q.fx,q.fy,q.fz=forward.X,forward.Y,forward.Z
+            if q.width~=viewport.X or q.height~=viewport.Y or q.fov~=fov then
+                q.width,q.height,q.fov=viewport.X,viewport.Y,fov
+                q.cx,q.cy=viewport.X*.5,viewport.Y*.5
+                q.focal=q.cy/math.tan(math.rad(fov)*.5)
+            end
             if cfg.esp_enabled then
                 for _,t in ipairs(r.targets) do
                     if t.entry.active and cfg["esp_"..t.entry.category] then
                         local slot=r.pool[used+1]
                         local projected=slot.projected local valid=true local minY=math.huge local sumX=0
                         local geometryChanged=false
-                        if t.center then local _,onScreen=WorldToScreen(t.center) if not onScreen then valid=false end end
+                        if t.center then local _,_,onScreen=project(t.center) if not onScreen then valid=false end end
                         for i,p in ipairs(t.points) do
                             if not valid then break end
-                            local xy,onScreen=WorldToScreen(p)
-                            if not onScreen or not finite(xy.X) or not finite(xy.Y) then valid=false break end
-                            projected[i]=xy minY=math.min(minY,xy.Y) sumX=sumX+xy.X
+                            local x,y,onScreen=project(p)
+                            if not onScreen then valid=false break end
+                            minY=math.min(minY,y) sumX=sumX+x
                             local j=i*2
-                            if slot.xy[j-1]~=xy.X or slot.xy[j]~=xy.Y then geometryChanged=true end
+                            -- Compare the reusable projection itself: partial offscreen
+                            -- passes must not leave a stale corner for the next frame.
+                            local old=projected[i]
+                            if not old or math.abs(old.X-x)>.001 or math.abs(old.Y-y)>.001 then projected[i]=Vector2.new(x,y) end
+                            if not slot.xy[j-1] or math.abs(slot.xy[j-1]-x)>.001 or math.abs(slot.xy[j]-y)>.001 then geometryChanged=true end
                         end
                         if valid then
                             used=used+1
+                            -- Face choice depends on the current camera, not the 5 Hz collector.
+                            if cameraPosition and t.right then
+                                local delta=cameraPosition-t.center
+                                local x=delta.X*t.right.X+delta.Y*t.right.Y+delta.Z*t.right.Z
+                                local y=delta.X*t.up.X+delta.Y*t.up.Y+delta.Z*t.up.Z
+                                local z=-(delta.X*t.look.X+delta.Y*t.look.Y+delta.Z*t.look.Z)
+                                t.faces[1]=x<0 and 1 or 2
+                                t.faces[2]=y<0 and 3 or 4
+                                t.faces[3]=z<0 and 5 or 6
+                            end
                             for j,face in ipairs(t.faces) do
                                 local fill,edge=slot.fills[j],slot.edges[j]
                                 if geometryChanged or slot["face"..j]~=face then
@@ -1992,10 +2112,12 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
                                 if slot.opacity~=cfg.esp_opacity then fill.Transparency=cfg.esp_opacity end
                             end
                             local tag=slot.tag
-                            if slot.text~=t.text then tag.Text=t.text slot.text=t.text end
-                            local tx,ty=sumX/8,minY-17
-                            if slot.tx~=tx or slot.ty~=ty then tag.Position=Vector2.new(tx,ty) slot.tx=tx slot.ty=ty end
-                            if slot.color~=t.color then tag.Color=t.color end
+                            if cfg.esp_names then
+                                if slot.text~=t.text then tag.Text=t.text slot.text=t.text end
+                                local tx,ty=sumX/8,minY-17
+                                if slot.tx~=tx or slot.ty~=ty then tag.Position=Vector2.new(tx,ty) slot.tx=tx slot.ty=ty end
+                                if slot.tagColor~=t.color then tag.Color=t.color slot.tagColor=t.color end
+                            end
                             if slot.tagVisible~=cfg.esp_names then tag.Visible=cfg.esp_names slot.tagVisible=cfg.esp_names end
                             slot.color=t.color slot.opacity=cfg.esp_opacity slot.visible=true
                             for i,xy in ipairs(projected) do slot.xy[i*2-1]=xy.X slot.xy[i*2]=xy.Y end
@@ -2006,6 +2128,8 @@ local function createObjectRenderer(v,ws,cfg,run,alive)
             for i=used+1,r.drawn do hide(r.pool[i]) end
             r.drawn=used
         end)
+        r.renderMs=(os.clock()-renderStarted)*1000
+        r.peakRenderMs=math.max(r.peakRenderMs or 0,r.renderMs)
         if not okRender then r.error=tostring(renderError) r.hideAll() end
     end)
     task.spawn(function()
@@ -2022,7 +2146,8 @@ end
 state.cfg.ap_enabled=false
 state.cfg.ap_range=10
 state.cfg.ap_lead=.08
-state.cfg.esp_hz=20
+state.cfg.esp_hz=60
+state.cfg.esp_auto_fps=false
 state.cfg.esp_limit=64
 state.cfg.esp_names=true
 state.cfg.esp_distance=1500
@@ -2223,6 +2348,7 @@ state.stop=function()
     if stopping then return false end
     stopping=true
     state.running=false uiCapture=false
+    vaGuideStop()
     if visuals.renderer then visuals.renderer.stop() end
     visuals.clear()
     fvCancelResolve() scReleaseInput() apRelease()
@@ -2300,7 +2426,8 @@ info(fv,"Vault recovery",function() return fvStat.error or "Module verified" end
 info(fv,"Vaults / fast",function() return string.format("%d / %d / Tier: %s",fvStat.vaults,fvStat.fast,fvStat.tier or "--") end)
 info(fv,"Windows / reason",function() return tostring(#vaults).." / "..tostring(fvStat.reason or "--") end)
 local va=main:AddIsland({Title="Veil Aim",Column=1})
-toggle(va,"Veil Spear Aimbot","va_enabled")
+toggle(va,"Veil Aim Enabled","va_enabled")
+toggle(va,"Aim guide (circled X, no lock)","va_guide")
 slider(va,"Field of view","va_fov",5,90,5," deg")
 slider(va,"Range","va_range",40,400,20," studs")
 slider(va,"Smoothing","va_smooth",1,20,1)
@@ -2364,7 +2491,8 @@ end)
 
 local vis=ui:AddTab({Title="Visuals",Icon="eye",Columns=1})
 local visGroup=vis:AddIsland({Title="Object ESP / Chams",Column=1})
-slider(visGroup,"Render rate","esp_hz",10,30,5," FPS")
+toggle(visGroup,"Match game FPS","esp_auto_fps")
+slider(visGroup,"Render rate","esp_hz",10,240,1," FPS")
 slider(visGroup,"Object limit","esp_limit",16,128,16,"")
 toggle(visGroup,"Enable object ESP","esp_enabled",function(value) c.esp_enabled=value visuals.changed() end)
 for _,item in ipairs({{"Pallets","pallets"},{"Windows","windows"},{"Generators","generators"},{"Beartraps","beartraps"},{"Pumpkins","pumpkins"}}) do
